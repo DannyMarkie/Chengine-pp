@@ -21,7 +21,7 @@ int main() {
     Board board(START_FEN, true);
     array<Move, 255> moves = board.get_pseudolegal_moves(Move(), board.board, board.turn);
     int n_moves = get_length(moves);
-
+    
     printf("Amount of pseudolegal moves: %i\n", n_moves);
 
     for (int i=0; i<n_moves; i++) {

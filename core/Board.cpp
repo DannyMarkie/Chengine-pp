@@ -63,11 +63,11 @@ void Board::load_fen(string fen_string) {
             rank++;
         } else {
             if (isdigit(symbol)) {
-                file += (int)symbol;
+                file += symbol - '0'; // Subtract '0' because characters are stored as ASCII values
             } else {
                 int piece_color = (isupper(symbol) ? WHITE : BLACK);
                 int piece_type = this->piece_type_from_symbol.at(tolower(symbol));
-                this->board[rank * 8 + file] = piece_color | piece_type;
+                this->board[(rank * 8) + file] = piece_color | piece_type;
                 file++;
             }
         }
@@ -75,35 +75,214 @@ void Board::load_fen(string fen_string) {
     return;
 }
 
+bool Board::is_in_check(int color) {
+    int king_square;
+    int opposite_color = (~color & COLOR_MASK);
+    for (int i=0; i<64; i++) {
+        if (this->board[i] == (color | KING)) {
+            king_square = i;
+        }
+    }
+    return this->attacked_squares[turn_to_attacked_map.at(opposite_color)][king_square];
+}
+
+bool Board::is_checkmate() {
+    int n_moves;
+    array<Move, 255> moves = this->get_pseudolegal_moves(Move(), this->get_board(), this->turn);
+    for (Move move : moves) {
+        if (move.moved_piece == EMPTY) break;
+        if (!this->move_is_legal(move)) break;
+        n_moves++;
+    }
+    return (this->is_in_check(this->turn) && n_moves == 0);
+}
+
 void Board::move_piece(Move move) {
+    this->turn = (~turn & COLOR_MASK);
+    this->just_removed_white_castling_kingside = false;
+    this->just_removed_white_castling_queenside = false;
+    this->just_removed_black_castling_kingside = false;
+    this->just_removed_black_castling_queenside = false;
+
+    // Remove castling rights if rook gets taken
+    if ((move.captured_piece & PIECE_MASK) == ROOK) {
+        int file = move.end_square % 8;
+        if ((move.captured_piece & COLOR_MASK) == WHITE) {
+            // If castling rights are not yet removed, remove it
+            if (file == 0 && !this->removed_white_castle_queenside) {
+                this->white_castle_queenside = false;
+                this->just_removed_white_castling_queenside = true;
+            } else if (!this->removed_white_castle_kingside) {
+                this->white_castle_kingside = false;
+                this->just_removed_white_castling_kingside = true;
+            }
+        } else {
+            // If castling rights are not yet removed, remove it
+            if (file == 0 && !this->removed_black_castle_queenside) {
+                this->black_castle_queenside = false;
+                this->just_removed_black_castling_queenside = true;
+            } else if (!this->removed_black_castle_kingside) {
+                this->black_castle_kingside = false;
+                this->just_removed_black_castling_kingside = true;
+            }
+        }
+    }
+
+    // Remove castling rights if rook moves
+    if ((move.moved_piece & PIECE_MASK) == ROOK) {
+        if ((move.moved_piece & COLOR_MASK) == WHITE) {
+            if (move.start_square == 56 && this->white_castle_queenside) {
+                this->white_castle_queenside = false;
+                this->just_removed_white_castling_queenside = true;
+            } else if (move.start_square == 63 && this->white_castle_kingside) {
+                this->white_castle_kingside = false;
+                this->just_removed_white_castling_kingside = true;
+            }
+        } else {
+            if (move.start_square == 56 && this->black_castle_queenside) {
+                this->black_castle_queenside = false;
+                this->just_removed_black_castling_queenside = true;
+            } else if (move.start_square == 63 && this->black_castle_kingside) {
+                this->black_castle_kingside = false;
+                this->just_removed_black_castling_kingside = true;
+            }
+        }
+    }
+
+    // Remove castling rights if king moves
+    if ((move.moved_piece & PIECE_MASK) == KING) {
+        if ((move.moved_piece & COLOR_MASK) == WHITE && (this->white_castle_kingside && this->white_castle_queenside)) {
+            this->white_castle_kingside = false;
+            this->white_castle_queenside = false;
+            this->just_removed_white_castling_kingside = true;
+            this->just_removed_white_castling_queenside = true;
+        } else if (this->black_castle_kingside && black_castle_queenside) {
+            this->black_castle_kingside = false;
+            this->black_castle_queenside = false;
+            this->just_removed_black_castling_kingside = true;
+            this->just_removed_black_castling_queenside = true;
+        }
+    }
+
+    // Castle
+    if ((move.flag & Move::Flag::castle) == Move::Flag::castle) {
+        if ((move.moved_piece & COLOR_MASK) == WHITE) {
+            this->just_removed_white_castling_kingside = true;
+            this->white_castle_kingside = false;
+            this->just_removed_white_castling_queenside = true;
+            this->white_castle_queenside = false;
+        } else {
+            this->just_removed_black_castling_kingside = true;
+            this->black_castle_kingside = false;
+            this->just_removed_black_castling_queenside = true;
+            this->black_castle_queenside = false;
+        }
+        this->board[move.start_square] = EMPTY;
+        this->board[move.end_square] = EMPTY;
+        if (move.start_square > move.end_square) {
+            this->board[move.start_square - 2] = move.moved_piece;
+            this->board[move.start_square - 1] = (move.moved_piece & COLOR_MASK) | ROOK;
+        } else {
+            this->board[move.start_square + 2] = move.moved_piece;
+            this->board[move.start_square + 1] = (move.moved_piece & COLOR_MASK) | ROOK;
+        }
+        this->update_attacked_tables();
+        return;
+    }
+
     // Promote
     if ((move.flag & Move::Flag::promote) == Move::Flag::promote) {
         this->board[move.end_square] = (this->board[move.start_square] & COLOR_MASK) | move.moved_piece;
         this->board[move.start_square] = EMPTY;
+        this->update_attacked_tables();
+        return;
+    }
+
+    // En passant
+    if ((move.flag & Move::Flag::en_passant) == Move::Flag::en_passant) {
+        int end_file = move.end_square % 8;
+        int start_file = move.start_square % 8;
+        this->board[move.end_square] = this->board[move.start_square];
+        this->board[move.start_square] = EMPTY;
+        this->board[move.start_square + end_file - start_file] = EMPTY;
+        this->update_attacked_tables();
         return;
     }
 
     this->board[move.end_square] = this->board[move.start_square];
     this->board[move.start_square] = EMPTY;
+    this->update_attacked_tables();
 }
 
 void Board::undo_move(Move move) {
+    this->turn = (~this->turn & COLOR_MASK);
+    // Return castling rights
+    if (this->just_removed_white_castling_kingside) {
+        this->white_castle_kingside = true;
+        this->just_removed_white_castling_kingside = false;
+    }
+    if (this->just_removed_white_castling_queenside) {
+        this->white_castle_queenside = true;
+        this->just_removed_white_castling_queenside = false;
+    }
+    if (this->just_removed_black_castling_kingside) {
+        this->black_castle_kingside = true;
+        this->just_removed_black_castling_kingside = false;
+    }
+    if (this->just_removed_black_castling_queenside) {
+        this->black_castle_queenside = true;
+        this->just_removed_black_castling_queenside = false;
+    }
+
+    // Castle
+    if ((move.flag & Move::Flag::castle) == Move::Flag::castle) {
+        if (move.start_square > move.end_square) {
+            this->board[move.start_square - 2] = EMPTY;
+            this->board[move.start_square - 1] = EMPTY;
+        } else {
+            this->board[move.start_square + 2] = EMPTY;
+            this->board[move.start_square + 1] = EMPTY;
+        }
+        this->board[move.start_square] = move.moved_piece;
+        this->board[move.end_square] = (move.moved_piece & COLOR_MASK) | ROOK;
+        this->update_attacked_tables();
+        return;
+    }
+
     // Promote
     if ((move.flag & Move::Flag::promote) == Move::Flag::promote) {
         this->board[move.start_square] = (this->board[move.end_square] & COLOR_MASK) | PAWN;
         this->board[move.end_square] = move.captured_piece;
+        this->update_attacked_tables();
+        return;
+    }
+
+    // En passant
+    if ((move.flag & Move::Flag::en_passant) == Move::Flag::en_passant) {
+        this->board[move.start_square] = this->board[move.end_square];
+        this->board[move.end_square] = EMPTY;
+        int offset = ((this->turn & COLOR_MASK) == WHITE) ? 1 : -1;
+        this->board[move.end_square + (offset * 8)] = (~this->turn & COLOR_MASK) | PAWN;
+        this->update_attacked_tables();
         return;
     }
 
     this->board[move.start_square] = this->board[move.end_square];
     this->board[move.end_square] = move.captured_piece;
+    this->update_attacked_tables();
 }
 
 bool Board::move_is_legal(Move move) {
-    return true;
+    int color = (this->board[move.start_square] & COLOR_MASK);
+    this->move_piece(move);
+    bool is_legal = (!this->is_in_check(color));
+    this->undo_move(move);
+    return is_legal;
 }
 
 void Board::update_attacked_tables() {
+    this->attacked_squares[0].fill(false);
+    this->attacked_squares[1].fill(false);
     for (int index=0; index<(int)this->board.size(); index++) {
         int piece = board[index];
         if (piece == EMPTY) continue;
@@ -142,7 +321,7 @@ void Board::update_attacked_tables() {
                 int next_square = index + (direction*steps);
                 int next_rank = (int)(next_square / 8);
                 int next_file = next_square % 8;
-                while ((next_rank < 8 && next_rank >= 0 && next_file < 8 && next_file >=0) && (abs(next_file - file) == steps && abs(next_rank - rank) == steps) && (next_square >= 0 && next_square < 64)) {
+                while ((next_rank < 8 && next_rank >= 0 && next_file < 8 && next_file >=0) && ((abs(next_file - file) == steps || abs(next_rank - rank) == steps) && (abs(next_file - file) + abs(next_rank - rank) == steps)) && (next_square >= 0 && next_square < 64)) {
                     this->attacked_squares[turn_to_attacked_map.at(color)][next_square] = true;
                     steps++;
                     if ((board[next_square] != EMPTY) || board[index] == KING) {
@@ -226,7 +405,6 @@ array<Move, 255> Board::get_pseudolegal_moves(Move last_move, array<int, 64> boa
             int direction = pawn_directions.at(turn);
             int next_square = index + direction;
             int next_rank = (int)(next_square / 8);
-            int next_file = next_square % 8;
             // Check if square in front is empty
             if (board[next_square] == EMPTY) {
                 // Check if moving the pawn would promote
@@ -247,38 +425,39 @@ array<Move, 255> Board::get_pseudolegal_moves(Move last_move, array<int, 64> boa
                     moves[n_moves] = move;
                     n_moves++;
                 }
-                // Check for captures
-                int capture_directions[2] = {direction+1, direction-1};
-                for (auto capture_direction : capture_directions) {
-                    int capture_square = index + capture_direction;
-                    if (capture_square == EMPTY || (capture_square & COLOR_MASK) == turn) {
-                        continue;
-                    }
-                    int capture_rank = (int)(capture_square / 8);
-                    if (capture_rank != next_rank) {
-                        continue;
-                    }
-                    // Check if pawn can promote with capture
-                    if (capture_rank == 0 || capture_rank == 7){
-                        for (auto promoted_piece : promotion_pieces) {
-                            Move move(index, capture_square, promoted_piece, board[capture_square], Move::Flag::promote);
-                            moves[n_moves] = move;
-                            n_moves++;
-                        }
-                    }
-                    else {
-                        Move move(index, capture_square, piece, board[capture_square], 0);
+            }
+            // Check for captures
+            int capture_directions[] = {direction+1, direction-1};
+            for (auto capture_direction : capture_directions) {
+                int capture_square = index + capture_direction;
+                int capture_rank = (int)(capture_square / 8);
+                // printf("Start square: %i\tCapture square: %i\tNext rank: %i\tCapture rank: %i\n", index, capture_square, 8-next_rank, 8-capture_rank);
+                if ((board[capture_square] == EMPTY) || ((board[capture_square] & COLOR_MASK) == turn)) {
+                    continue;
+                }
+                if (capture_rank != next_rank) {
+                    continue;
+                }
+                // Check if pawn can promote with capture
+                if (capture_rank == 0 || capture_rank == 7){
+                    for (auto promoted_piece : promotion_pieces) {
+                        Move move(index, capture_square, promoted_piece, board[capture_square], Move::Flag::promote);
                         moves[n_moves] = move;
                         n_moves++;
                     }
                 }
-                // En passant
-                if (last_move.moved_piece != EMPTY) {
-                    if (last_move.moved_piece == PAWN && (last_move.end_square == index-1 || last_move.end_square == index+1) && ((last_move.start_square == last_move.end_square-16 && turn == BLACK) || (last_move.start_square == last_move.end_square+16 && turn == WHITE)) && (int)(index/8) == (int)(last_move.end_square/8)) {
-                        Move move(index, index + direction + (last_move.end_square - index), board[index], board[index + direction + (last_move.end_square - index)], Move::Flag::en_passant);
-                        moves[n_moves] = move;
-                        n_moves++;
-                    }
+                else {
+                    Move move(index, capture_square, piece, board[capture_square], 0);
+                    moves[n_moves] = move;
+                    n_moves++;
+                }
+            }
+            // En passant
+            if (last_move.moved_piece != EMPTY) {
+                if (last_move.moved_piece == PAWN && (last_move.end_square == index-1 || last_move.end_square == index+1) && ((last_move.start_square == last_move.end_square-16 && turn == BLACK) || (last_move.start_square == last_move.end_square+16 && turn == WHITE)) && (int)(index/8) == (int)(last_move.end_square/8)) {
+                    Move move(index, index + direction + (last_move.end_square - index), board[index], board[index + direction + (last_move.end_square - index)], Move::Flag::en_passant);
+                    moves[n_moves] = move;
+                    n_moves++;
                 }
             }
             continue;
@@ -316,7 +495,7 @@ array<Move, 255> Board::get_pseudolegal_moves(Move last_move, array<int, 64> boa
                     moves[n_moves] = move;
                     n_moves++;
                     steps++;
-                    if ((board[next_square] & COLOR_MASK) == (~turn & COLOR_MASK) || board[index] == KING) {
+                    if (((board[next_square] & COLOR_MASK) == (~turn & COLOR_MASK)) || ((board[index] & PIECE_MASK)== KING)) {
                         break;
                     }
                     next_square = index + (direction*steps);
@@ -325,22 +504,21 @@ array<Move, 255> Board::get_pseudolegal_moves(Move last_move, array<int, 64> boa
                 }
             }
         }
-
         // Orthogonal moves
         if (((piece & PIECE_MASK) == ROOK || (piece & PIECE_MASK) == QUEEN || (piece & PIECE_MASK) == KING) && (piece & COLOR_MASK) == turn) {
             int orthogonal_move_amount = sizeof(orthogonal_directions) / sizeof(orthogonal_directions[0]);
             for (int i=0; i<orthogonal_move_amount; i++) {
-                int direction = diagonal_directions[i];
+                int direction = orthogonal_directions[i];
                 int steps = 1;
                 int next_square = index + (direction*steps);
                 int next_rank = (int)(next_square / 8);
                 int next_file = next_square % 8;
-                while ((next_rank < 8 && next_rank >= 0 && next_file < 8 && next_file >=0) && (abs(next_file - file) == steps && abs(next_rank - rank) == steps) && (next_square >= 0 && next_square < 64) && ((board[next_square] & COLOR_MASK) != turn)) {
+                while ((next_rank < 8 && next_rank >= 0 && next_file < 8 && next_file >=0) && ((abs(next_file - file) == steps || abs(next_rank - rank) == steps) && (abs(next_file - file) + abs(next_rank - rank) == steps)) && (next_square >= 0 && next_square < 64) && ((board[next_square] & COLOR_MASK) != turn)) {
                     Move move(index, next_square, board[index], board[next_square], 0);
                     moves[n_moves] = move;
                     n_moves++;
                     steps++;
-                    if ((board[next_square] & COLOR_MASK) == (~turn & COLOR_MASK) || board[index] == KING) {
+                    if ((board[next_square] & COLOR_MASK) == (~turn & COLOR_MASK) || ((board[index] & PIECE_MASK)== KING)) {
                         break;
                     }
                     next_square = index + (direction*steps);
@@ -375,62 +553,62 @@ void Board::update_render() {
         sf::Texture texture;
         switch (this->board[i]) {
             case WHITE_PAWN:
-                texture.loadFromFile("./assets/whitePawn.png");
+                texture.loadFromFile("C:/Users/Danny/Documents/Programming/Git Projects/Chengine++/Chengine-pp/assets/whitePawn.png");
                 sprite.setTexture(texture);
                 sprite.setPosition(sf::Vector2f(x+12.5, y+12.5));
                 break;
             case WHITE_BISHOP:
-                texture.loadFromFile("./assets/whiteBishop.png");
+                texture.loadFromFile("C:/Users/Danny/Documents/Programming/Git Projects/Chengine++/Chengine-pp/assets/whiteBishop.png");
                 sprite.setTexture(texture);
                 sprite.setPosition(sf::Vector2f(x+10, y+10));
                 break;
             case WHITE_KNIGHT:
-                texture.loadFromFile("./assets/whiteKnight.png");
+                texture.loadFromFile("C:/Users/Danny/Documents/Programming/Git Projects/Chengine++/Chengine-pp/assets/whiteKnight.png");
                 sprite.setTexture(texture);
                 sprite.setPosition(sf::Vector2f(x+12.5, y+12.5));
                 break;
             case WHITE_ROOK:
-                texture.loadFromFile("./assets/whiteRook.png");
+                texture.loadFromFile("C:/Users/Danny/Documents/Programming/Git Projects/Chengine++/Chengine-pp/assets/whiteRook.png");
                 sprite.setTexture(texture);
                 sprite.setPosition(sf::Vector2f(x+12.5, y+12.5));
                 break;
             case WHITE_QUEEN:
-                texture.loadFromFile("./assets/whiteQueen.png");
+                texture.loadFromFile("C:/Users/Danny/Documents/Programming/Git Projects/Chengine++/Chengine-pp/assets/whiteQueen.png");
                 sprite.setTexture(texture);
                 sprite.setPosition(sf::Vector2f(x+7.5, y+7.5));
                 break;
             case WHITE_KING:
-                texture.loadFromFile("./assets/whiteKing.png");
+                texture.loadFromFile("C:/Users/Danny/Documents/Programming/Git Projects/Chengine++/Chengine-pp/assets/whiteKing.png");
                 sprite.setTexture(texture);
                 sprite.setPosition(sf::Vector2f(x+10, y+10));
                 break;
             case BLACK_PAWN:
-                texture.loadFromFile("./assets/blackPawn.png");
+                texture.loadFromFile("C:/Users/Danny/Documents/Programming/Git Projects/Chengine++/Chengine-pp/assets/blackPawn.png");
                 sprite.setTexture(texture);
                 sprite.setPosition(sf::Vector2f(x+12.5, y+12.5));
                 break;
             case BLACK_BISHOP:
-                texture.loadFromFile("./assets/blackBishop.png");
+                texture.loadFromFile("C:/Users/Danny/Documents/Programming/Git Projects/Chengine++/Chengine-pp/assets/blackBishop.png");
                 sprite.setTexture(texture);
                 sprite.setPosition(sf::Vector2f(x+10, y+10));
                 break;
             case BLACK_KNIGHT:
-                texture.loadFromFile("./assets/blackKnight.png");
+                texture.loadFromFile("C:/Users/Danny/Documents/Programming/Git Projects/Chengine++/Chengine-pp/assets/blackKnight.png");
                 sprite.setTexture(texture);
                 sprite.setPosition(sf::Vector2f(x+12.5, y+12.5));
                 break;
             case BLACK_ROOK:
-                texture.loadFromFile("./assets/blackRook.png");
+                texture.loadFromFile("C:/Users/Danny/Documents/Programming/Git Projects/Chengine++/Chengine-pp/assets/blackRook.png");
                 sprite.setTexture(texture);
                 sprite.setPosition(sf::Vector2f(x+12.5, y+12.5));
                 break;
             case BLACK_QUEEN:
-                texture.loadFromFile("./assets/blackQueen.png");
+                texture.loadFromFile("C:/Users/Danny/Documents/Programming/Git Projects/Chengine++/Chengine-pp/assets/blackQueen.png");
                 sprite.setTexture(texture);
                 sprite.setPosition(sf::Vector2f(x+7.5, y+7.5));
                 break;
             case BLACK_KING:
-                texture.loadFromFile("./assets/blackKing.png");
+                texture.loadFromFile("C:/Users/Danny/Documents/Programming/Git Projects/Chengine++/Chengine-pp/assets/blackKing.png");
                 sprite.setTexture(texture);
                 sprite.setPosition(sf::Vector2f(x+10, y+10));
                 break;

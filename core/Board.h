@@ -35,9 +35,9 @@ class Board {
         int turn;
         bool render;
         array<array<bool, 64>, 2> attacked_squares;
+        sf::RenderWindow window;
 
     private:
-        sf::RenderWindow window;
         string fen_string;
         bool white_castle_queenside;
         bool white_castle_kingside;
@@ -47,6 +47,10 @@ class Board {
         bool removed_white_castle_queenside;
         bool removed_black_castle_kingside;
         bool removed_black_castle_queenside;
+        bool just_removed_white_castling_kingside;
+        bool just_removed_white_castling_queenside;
+        bool just_removed_black_castling_kingside;
+        bool just_removed_black_castling_queenside;
         unordered_map<char, int> piece_type_from_symbol = {
             {'k', KING},
             {'p', PAWN},
@@ -100,6 +104,18 @@ class Board {
          * Updates the renderwindow with the new board position.
         */
         void update_render();
+
+        /**
+         * Checks if the given color's king is in check.
+         * 
+         * @param color The color to check if they are in check.
+        */
+        bool is_in_check(int color);
+
+        /**
+         * Checks if the board is in a checkmate position.
+        */
+        bool is_checkmate();
 
         /**
          * Moves a piece on the board.
