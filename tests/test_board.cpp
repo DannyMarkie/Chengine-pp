@@ -240,7 +240,7 @@ void test_move_generation_pos6(bool render, int depth) {
             failed = true;
             status = "Failed";
         }
-        printf("Position: 6\t Depth: %i ply\tLegal moves generated: %i \t\tExpected output: %lli\t\tTime: %llims\n", ply, n_moves, legal_moves_ply[ply-1], duration.count());
+        printf("Position: 6\t Depth: %i ply\tLegal moves generated: %i \t\tExpected output: %lli\t\tTime: %llims\t\t", ply, n_moves, legal_moves_ply[ply-1], duration.count());
         cout << status << endl;
     }
 }
