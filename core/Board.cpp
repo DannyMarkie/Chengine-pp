@@ -5,24 +5,85 @@ std::unordered_map<int, int> pawn_directions = {
     {16, 8}
 };
 
-std::unordered_map<int, int> turn_to_attacked_map = {
-    {8, 0},
-    {16, 1}
-};
-
 Board::Board()
     : render(false), fen_string(START_FEN)
 {
+    this->preprocess_data();
     load_fen(this->fen_string);
 }
 
 Board::Board(string fen_string, bool render) 
     : render(render), fen_string(fen_string)
 {
+    this->preprocess_data();
     load_fen(this->fen_string);
     if (render == true) {
         this->setup_render();
     }
+}
+
+void Board::preprocess_data() {
+    this->preprocess_steps_in_direction_squares();
+}
+
+void Board::preprocess_steps_in_direction_squares() {
+    for (int square=0; square<64; square++) {
+        int rank = (int)(square / 8);
+        int file = square % 8;
+        // Orthogonal directions
+        for (int i=0; i<4; i++) {
+            int direction = orthogonal_directions[i];
+            int steps = 1;
+            int next_square = square + (direction*steps);
+            int next_rank = (int)(next_square / 8);
+            int next_file = next_square % 8;
+            while ((next_rank < 8 && next_rank >= 0 && next_file < 8 && next_file >=0) && ((abs(next_file - file) == steps || abs(next_rank - rank) == steps) && (abs(next_file - file) + abs(next_rank - rank) == steps)) && (next_square >= 0 && next_square < 64)) {
+                steps++;
+                next_square = square + (direction*steps);
+                next_rank = (int)(next_square / 8);
+                next_file = next_square % 8;
+            }
+            this->steps_in_direction[square][i] = steps - 1;
+        }
+
+        // Diagonal directions
+        for (int i=DIAGONAL_OFFSET; i<(DIAGONAL_OFFSET+4); i++) {
+            int direction = diagonal_directions[i-4];
+            int steps = 1;
+            int next_square = square + (direction*steps);
+            int next_rank = (int)(next_square / 8);
+            int next_file = next_square % 8;
+            while ((next_rank < 8 && next_rank >= 0 && next_file < 8 && next_file >=0) && (abs(next_file - file) == steps && abs(next_rank - rank) == steps) && (next_square >= 0 && next_square < 64)) {
+                steps++;
+                next_square = square + (direction*steps);
+                next_rank = (int)(next_square / 8);
+                next_file = next_square % 8;
+            }
+            this->steps_in_direction[square][i] = steps - 1;
+        }
+
+        // Knight directions
+        for (int i=KNIGHT_OFFSET; i<(KNIGHT_OFFSET+8); i++) {
+            int direction = knight_directions[i-8];
+            int steps = 0;
+            int next_square = square + direction;
+            int next_file = next_square % 8;
+            int next_rank = (int)(next_square / 8);
+            int rank_difference = (int)((CENTRAL_SQUARE + direction) / 8) - (int)(CENTRAL_SQUARE / 8);
+            int file_difference = ((CENTRAL_SQUARE + direction) % 8) - (CENTRAL_SQUARE % 8);
+            if ((next_file - file == file_difference) && (next_rank - rank == rank_difference) && (next_square >= 0 && next_square < 64)) {
+                steps++;
+            }
+            this->steps_in_direction[square][i] = steps;
+        }
+    }
+}
+
+int Board::turn_to_attacked_map(int color) {
+    if (color == 0) {
+        cout << "whut" << endl;
+    }
+    return ((color / 8) - 1);
 }
 
 array<int, 64> Board::get_board() {
@@ -75,6 +136,67 @@ void Board::load_fen(string fen_string) {
     return;
 }
 
+bool Board::target_is_attacked(int target, int color) {
+    // Pawn piece
+    int pawn_direction = (color == WHITE) ? -8 : 8;
+    int pawn_attacking_directions[] = {pawn_direction+1, pawn_direction-1};
+    int target_file = target % 8;
+    int target_rank = (int)(target / 8);
+    for (auto direction : pawn_attacking_directions) {
+        int next_square = target + direction;
+        int next_rank = (int)(next_square / 8);
+        int next_file = next_square % 8;
+        if (((this->board[next_square] & PIECE_MASK) == PAWN) && ((this->board[next_square] & COLOR_MASK) == (~color & COLOR_MASK)) && ((next_rank - target_rank) == (pawn_direction / 8))) {
+            return true;
+        }
+    }
+
+    // Knight attacked places
+    for (int i=0; i<8; i++) {
+        int direction = knight_directions[i];
+        int next_square = target + direction;
+        if ((this->steps_in_direction[target][i+KNIGHT_OFFSET] == 1) && ((this->board[next_square] & COLOR_MASK) == (~color & COLOR_MASK) && (this->board[next_square] & PIECE_MASK) == KNIGHT) && (next_square >= 0 && next_square < 64)) {
+            return true;
+        }
+    }
+
+    // Orthogonally attacked places
+    for (int i=0; i<4; i++) {
+        int direction = orthogonal_directions[i];
+        int next_square = target + direction;
+        int steps = 1;
+        while ((this->steps_in_direction[target][i] >= steps) && ((this->board[next_square] & COLOR_MASK) != color)) {
+            steps++;
+            if ((this->board[next_square] & COLOR_MASK) == (~color & COLOR_MASK)) {
+                if ((this->board[next_square] & PIECE_MASK) == QUEEN || (this->board[next_square] & PIECE_MASK) == ROOK || ((this->board[next_square] & PIECE_MASK) == KING && steps == 1)) {
+                    return true;
+                }
+                break;
+            }
+            next_square = target + (direction * steps);
+        }
+    }
+
+    // Diagonally attacked places
+    for (int i=0; i<4; i++) {
+        int direction = diagonal_directions[i];
+        int next_square = target + direction;
+        int steps = 1;
+        while ((this->steps_in_direction[target][i+DIAGONAL_OFFSET] >= steps) && (next_square >= 0 && next_square < 64) && ((this->board[next_square] & COLOR_MASK) != color)) {
+            // cout << "yues" << endl;
+            steps++;
+            if ((this->board[next_square] & COLOR_MASK) == (~color & COLOR_MASK)) {
+                if ((this->board[next_square] & PIECE_MASK) == QUEEN || (this->board[next_square] & PIECE_MASK) == BISHOP || ((this->board[next_square] & PIECE_MASK) == KING && steps == 1)) {
+                    return true;
+                }
+                break;
+            }
+            next_square = target + (direction * steps);
+        }
+    }
+    return false;
+}
+
 bool Board::is_in_check(int color) {
     int king_square;
     int opposite_color = (~color & COLOR_MASK);
@@ -83,7 +205,8 @@ bool Board::is_in_check(int color) {
             king_square = i;
         }
     }
-    return this->attacked_squares[turn_to_attacked_map.at(opposite_color)][king_square];
+    return this->target_is_attacked(king_square, color);
+    // return this->attacked_squares[this->turn_to_attacked_map(opposite_color)][king_square];
 }
 
 bool Board::is_checkmate() {
@@ -156,7 +279,7 @@ void Board::move_piece(Move move) {
             this->white_castle_queenside = false;
             this->just_removed_white_castling_kingside = true;
             this->just_removed_white_castling_queenside = true;
-        } else if (this->black_castle_kingside && black_castle_queenside) {
+        } else if ((move.moved_piece & COLOR_MASK) == BLACK && this->black_castle_kingside && black_castle_queenside) {
             this->black_castle_kingside = false;
             this->black_castle_queenside = false;
             this->just_removed_black_castling_kingside = true;
@@ -186,7 +309,7 @@ void Board::move_piece(Move move) {
             this->board[move.start_square + 2] = move.moved_piece;
             this->board[move.start_square + 1] = (move.moved_piece & COLOR_MASK) | ROOK;
         }
-        this->update_attacked_tables();
+        // this->update_attacked_tables();
         return;
     }
 
@@ -194,7 +317,7 @@ void Board::move_piece(Move move) {
     if ((move.flag & Move::Flag::promote) == Move::Flag::promote) {
         this->board[move.end_square] = (this->board[move.start_square] & COLOR_MASK) | move.moved_piece;
         this->board[move.start_square] = EMPTY;
-        this->update_attacked_tables();
+        // this->update_attacked_tables();
         return;
     }
 
@@ -205,13 +328,13 @@ void Board::move_piece(Move move) {
         this->board[move.end_square] = this->board[move.start_square];
         this->board[move.start_square] = EMPTY;
         this->board[move.start_square + end_file - start_file] = EMPTY;
-        this->update_attacked_tables();
+        // this->update_attacked_tables();
         return;
     }
 
     this->board[move.end_square] = this->board[move.start_square];
     this->board[move.start_square] = EMPTY;
-    this->update_attacked_tables();
+    // this->update_attacked_tables();
 }
 
 void Board::undo_move(Move move) {
@@ -245,7 +368,7 @@ void Board::undo_move(Move move) {
         }
         this->board[move.start_square] = move.moved_piece;
         this->board[move.end_square] = (move.moved_piece & COLOR_MASK) | ROOK;
-        this->update_attacked_tables();
+        // this->update_attacked_tables();
         return;
     }
 
@@ -253,7 +376,7 @@ void Board::undo_move(Move move) {
     if ((move.flag & Move::Flag::promote) == Move::Flag::promote) {
         this->board[move.start_square] = (this->board[move.end_square] & COLOR_MASK) | PAWN;
         this->board[move.end_square] = move.captured_piece;
-        this->update_attacked_tables();
+        // this->update_attacked_tables();
         return;
     }
 
@@ -263,13 +386,13 @@ void Board::undo_move(Move move) {
         this->board[move.end_square] = EMPTY;
         int offset = ((this->turn & COLOR_MASK) == WHITE) ? 1 : -1;
         this->board[move.end_square + (offset * 8)] = (~this->turn & COLOR_MASK) | PAWN;
-        this->update_attacked_tables();
+        // this->update_attacked_tables();
         return;
     }
 
     this->board[move.start_square] = this->board[move.end_square];
     this->board[move.end_square] = move.captured_piece;
-    this->update_attacked_tables();
+    // this->update_attacked_tables();
 }
 
 bool Board::move_is_legal(Move move) {
@@ -287,26 +410,20 @@ void Board::update_attacked_tables() {
         int piece = board[index];
         if (piece == EMPTY) continue;
         int color = piece & COLOR_MASK;
-        int file = index % 8;
-        int rank = (int)(index / 8);
         // Pawn attacked places
         if ((piece & PIECE_MASK) == PAWN) {
-            int direction = pawn_directions.at(color);
-            this->attacked_squares[turn_to_attacked_map.at(color)][index + direction + 1] = true;
-            this->attacked_squares[turn_to_attacked_map.at(color)][index + direction - 1] = true;
+            // int direction = pawn_directions.at(color);
+            int direction = (color == WHITE) ? -8 : 8;
+            this->attacked_squares[this->turn_to_attacked_map(color)][index + direction + 1] = true;
+            this->attacked_squares[this->turn_to_attacked_map(color)][index + direction - 1] = true;
         }
         // Knight attacked places
         if ((piece & PIECE_MASK) == KNIGHT) {
-            int knight_move_amount = sizeof(knight_directions) / sizeof(knight_directions[0]);
-            for (int i=0; i<knight_move_amount; i++) {
-                int direction = knight_directions[i]; 
+            for (int i=0; i<8; i++) {
+                int direction = knight_directions[i];
                 int next_square = index + direction;
-                int next_file = next_square % 8;
-                int next_rank = (int)(next_square / 8);
-                int rank_difference = (int)((CENTRAL_SQUARE + direction) / 8) - (int)(CENTRAL_SQUARE / 8);
-                int file_difference = ((CENTRAL_SQUARE + direction) % 8) - (CENTRAL_SQUARE % 8);
-                if ((next_file - file == file_difference) && next_rank - rank == rank_difference && (next_square >= 0 && next_square < 64)) {
-                    this->attacked_squares[turn_to_attacked_map.at(color)][next_square] = true;
+                if ((this->steps_in_direction[index][i+KNIGHT_OFFSET] == 1) && ((board[next_square] & COLOR_MASK) != turn) && (next_square >= 0 && next_square < 64)) {
+                    this->attacked_squares[this->turn_to_attacked_map(color)][next_square] = true;
                 }
             }
             continue;
@@ -314,44 +431,34 @@ void Board::update_attacked_tables() {
 
         // Orthogonally attacked places
         if (((piece & PIECE_MASK) == ROOK || (piece & PIECE_MASK) == QUEEN || (piece & PIECE_MASK) == KING)) {
-            int orthogonal_move_amount = sizeof(orthogonal_directions) / sizeof(orthogonal_directions[0]);
-            for (int i=0; i<orthogonal_move_amount; i++) {
+            for (int i=0; i<4; i++) {
                 int direction = orthogonal_directions[i];
+                int next_square = index + direction;
                 int steps = 1;
-                int next_square = index + (direction*steps);
-                int next_rank = (int)(next_square / 8);
-                int next_file = next_square % 8;
-                while ((next_rank < 8 && next_rank >= 0 && next_file < 8 && next_file >=0) && ((abs(next_file - file) == steps || abs(next_rank - rank) == steps) && (abs(next_file - file) + abs(next_rank - rank) == steps)) && (next_square >= 0 && next_square < 64)) {
-                    this->attacked_squares[turn_to_attacked_map.at(color)][next_square] = true;
+                while ((this->steps_in_direction[index][i] >= steps) && ((board[next_square] & COLOR_MASK) != turn)) {
+                    this->attacked_squares[this->turn_to_attacked_map(color)][next_square] = true;
                     steps++;
                     if ((board[next_square] != EMPTY) || board[index] == KING) {
                         break;
                     }
                     next_square = index + (direction*steps);
-                    next_rank = (int)(next_square / 8);
-                    next_file = next_square % 8;
                 }
             }
         }
 
         // Diagonally attacked places
         if (((piece & PIECE_MASK) == BISHOP || (piece & PIECE_MASK) == QUEEN || (piece & PIECE_MASK) == KING)) {
-            int diagonal_move_amount = sizeof(diagonal_directions) / sizeof(diagonal_directions[0]);
-            for (int i=0; i<diagonal_move_amount; i++) {
+            for (int i=0; i<4; i++) {
                 int direction = diagonal_directions[i];
+                int next_square = index + direction;
                 int steps = 1;
-                int next_square = index + (direction*steps);
-                int next_rank = (int)(next_square / 8);
-                int next_file = next_square % 8;
-                while ((next_rank < 8 && next_rank >= 0 && next_file < 8 && next_file >=0) && (abs(next_file - file) == steps && abs(next_rank - rank) == steps) && (next_square >= 0 && next_square < 64)) {
-                    this->attacked_squares[turn_to_attacked_map.at(color)][next_square] = true;
+                while ((this->steps_in_direction[index][i+DIAGONAL_OFFSET] >= steps) && (next_square >= 0 && next_square < 64)) {
+                    this->attacked_squares[this->turn_to_attacked_map(color)][next_square] = true;
                     steps++;
                     if ((board[next_square] != EMPTY) || board[index] == KING) {
                         break;
                     }
                     next_square = index + (direction*steps);
-                    next_rank = (int)(next_square / 8);
-                    next_file = next_square % 8;
                 }
             }
         }
@@ -365,14 +472,16 @@ array<Move, 255> Board::get_pseudolegal_moves(Move last_move, array<int, 64> boa
     // Castling
     if (turn == WHITE) {
         if ((this->white_castle_kingside == true) && (board[63] == WHITE_ROOK) && (board[60] == WHITE_KING) && (board[62] == EMPTY) && (board[61] == EMPTY)) {
-            if (this->attacked_squares[turn_to_attacked_map.at(opposite_color)][60] == false && this->attacked_squares[turn_to_attacked_map.at(opposite_color)][61] == false && this->attacked_squares[turn_to_attacked_map.at(opposite_color)][62] == false) {
+            if (this->target_is_attacked(60, turn) == false && this->target_is_attacked(61, turn) == false && this->target_is_attacked(62, turn) == false) {
+            // if (this->attacked_squares[this->turn_to_attacked_map(opposite_color)][60] == false && this->attacked_squares[this->turn_to_attacked_map(opposite_color)][61] == false && this->attacked_squares[this->turn_to_attacked_map(opposite_color)][62] == false) {
                 Move move(60, 63, WHITE_KING, EMPTY, Move::Flag::castle);
                 moves[n_moves] = move;
                 n_moves++;
             }
         }
         if (this->white_castle_queenside == true && board[56] == WHITE_ROOK && board[60] == WHITE_KING && board[59] == EMPTY && board[58] == EMPTY && board[57] == EMPTY) {
-            if (this->attacked_squares[turn_to_attacked_map.at(opposite_color)][60] == false && this->attacked_squares[turn_to_attacked_map.at(opposite_color)][59] == false && this->attacked_squares[turn_to_attacked_map.at(opposite_color)][58] == false) {
+            if (this->target_is_attacked(60, turn) == false && this->target_is_attacked(59, turn) == false && this->target_is_attacked(58, turn) == false) {
+            // if (this->attacked_squares[this->turn_to_attacked_map(opposite_color)][60] == false && this->attacked_squares[this->turn_to_attacked_map(opposite_color)][59] == false && this->attacked_squares[this->turn_to_attacked_map(opposite_color)][58] == false) {
                 Move move(60, 56, WHITE_KING, EMPTY, Move::Flag::castle);
                 moves[n_moves] = move;
                 n_moves++;
@@ -380,14 +489,18 @@ array<Move, 255> Board::get_pseudolegal_moves(Move last_move, array<int, 64> boa
         }
     } else {
         if (this->black_castle_kingside == true && board[7] == BLACK_ROOK && board[4] == BLACK_KING && board[5] == EMPTY && board[6] == EMPTY) {
-            if (this->attacked_squares[turn_to_attacked_map.at(opposite_color)][4] == false && this->attacked_squares[turn_to_attacked_map.at(opposite_color)][5] == false && this->attacked_squares[turn_to_attacked_map.at(opposite_color)][6] == false) {
+            if (this->target_is_attacked(4, turn) == false && this->target_is_attacked(5, turn) == false && this->target_is_attacked(6, turn) == false) {
+            // if (this->attacked_squares[this->turn_to_attacked_map(opposite_color)][4] == false && this->attacked_squares[this->turn_to_attacked_map(opposite_color)][5] == false && this->attacked_squares[this->turn_to_attacked_map(opposite_color)][6] == false) {
                 Move move(4, 7, BLACK_KING, EMPTY, Move::Flag::castle);
                 moves[n_moves] = move;
                 n_moves++;
             }
         }
-        if (this->black_castle_queenside == true && board[0] == WHITE_ROOK && board[4] == WHITE_KING && board[3] == EMPTY && board[2] == EMPTY && board[1] == EMPTY) {
-            if (this->attacked_squares[turn_to_attacked_map.at(opposite_color)][4] == false && this->attacked_squares[turn_to_attacked_map.at(opposite_color)][3] == false && this->attacked_squares[turn_to_attacked_map.at(opposite_color)][2] == false) {
+        if (this->black_castle_queenside == true && board[0] == BLACK_ROOK && board[4] == BLACK_KING && board[3] == EMPTY && board[2] == EMPTY && board[1] == EMPTY) {
+            if (this->target_is_attacked(4, turn) == false && this->target_is_attacked(3, turn) == false && this->target_is_attacked(2, turn) == false) {
+            // cout << this->turn_to_attacked_map(opposite_color) << endl;
+            // cout << this->attacked_squares[this->turn_to_attacked_map(opposite_color)][3] << endl;
+            // if (this->attacked_squares[this->turn_to_attacked_map(opposite_color)][4] == false && this->attacked_squares[this->turn_to_attacked_map(opposite_color)][3] == false && this->attacked_squares[this->turn_to_attacked_map(opposite_color)][2] == false) {
                 Move move(4, 0, BLACK_KING, EMPTY, Move::Flag::castle);
                 moves[n_moves] = move;
                 n_moves++;
@@ -398,11 +511,9 @@ array<Move, 255> Board::get_pseudolegal_moves(Move last_move, array<int, 64> boa
     for (int index=0; index<(int)board.size(); index++) {
         int piece = board[index];
         if (piece == EMPTY) continue;
-        int file = index % 8;
-        int rank = (int)(index / 8);
         // Pawn moves
         if ((piece & PIECE_MASK) == PAWN && (piece & COLOR_MASK) == turn) {
-            int direction = pawn_directions.at(turn);
+            int direction = (turn == WHITE) ? -8 : 8;
             int next_square = index + direction;
             int next_rank = (int)(next_square / 8);
             // Check if square in front is empty
@@ -454,7 +565,7 @@ array<Move, 255> Board::get_pseudolegal_moves(Move last_move, array<int, 64> boa
             }
             // En passant
             if (last_move.moved_piece != EMPTY) {
-                if (last_move.moved_piece == PAWN && (last_move.end_square == index-1 || last_move.end_square == index+1) && ((last_move.start_square == last_move.end_square-16 && turn == BLACK) || (last_move.start_square == last_move.end_square+16 && turn == WHITE)) && (int)(index/8) == (int)(last_move.end_square/8)) {
+                if ((last_move.moved_piece & PIECE_MASK) == PAWN && (last_move.end_square == index-1 || last_move.end_square == index+1) && ((last_move.end_square == last_move.start_square-16 && turn == BLACK) || (last_move.end_square == last_move.start_square+16 && turn == WHITE)) && (int)(index/8) == (int)(last_move.end_square/8)) {
                     Move move(index, index + direction + (last_move.end_square - index), board[index], board[index + direction + (last_move.end_square - index)], Move::Flag::en_passant);
                     moves[n_moves] = move;
                     n_moves++;
@@ -465,15 +576,10 @@ array<Move, 255> Board::get_pseudolegal_moves(Move last_move, array<int, 64> boa
 
         // Knight moves
         if ((piece & PIECE_MASK) == KNIGHT && (piece & COLOR_MASK) == turn) {
-            int knight_move_amount = sizeof(knight_directions) / sizeof(knight_directions[0]);
-            for (int i=0; i<knight_move_amount; i++) {
-                int direction = knight_directions[i]; 
+            for (int i=0; i<8; i++) {
+                int direction = knight_directions[i];
                 int next_square = index + direction;
-                int next_file = next_square % 8;
-                int next_rank = (int)(next_square / 8);
-                int rank_difference = (int)((CENTRAL_SQUARE + direction) / 8) - (int)(CENTRAL_SQUARE / 8);
-                int file_difference = ((CENTRAL_SQUARE + direction) % 8) - (CENTRAL_SQUARE % 8);
-                if ((next_file - file == file_difference) && next_rank - rank == rank_difference && (board[next_square] & COLOR_MASK) != turn && (next_square >= 0 && next_square < 64)) {
+                if ((this->steps_in_direction[index][i+KNIGHT_OFFSET] == 1) && ((board[next_square] & COLOR_MASK) != turn) && (next_square >= 0 && next_square < 64)) {
                     Move move(index, next_square, piece, board[next_square], 0);
                     moves[n_moves] = move;
                     n_moves++;
@@ -483,50 +589,37 @@ array<Move, 255> Board::get_pseudolegal_moves(Move last_move, array<int, 64> boa
         }
         // Diagonal moves
         if (((piece & PIECE_MASK) == BISHOP || (piece & PIECE_MASK) == QUEEN || (piece & PIECE_MASK) == KING) && (piece & COLOR_MASK) == turn) {
-            int diagonal_move_amount = sizeof(diagonal_directions) / sizeof(diagonal_directions[0]);
-            for (int i=0; i<diagonal_move_amount; i++) {
+            for (int i=0; i<4; i++) {
                 int direction = diagonal_directions[i];
+                int next_square = index + direction;
                 int steps = 1;
-                int next_square = index + (direction*steps);
-                int next_rank = (int)(next_square / 8);
-                int next_file = next_square % 8;
-                while ((next_rank < 8 && next_rank >= 0 && next_file < 8 && next_file >=0) && (abs(next_file - file) == steps && abs(next_rank - rank) == steps) && (next_square >= 0 && next_square < 64) && ((board[next_square] & COLOR_MASK) != turn)) {
-                    Move move(index, next_square, board[index], board[next_square], 0);
+                while ((this->steps_in_direction[index][i+DIAGONAL_OFFSET] >= steps) && ((board[next_square] & COLOR_MASK) != turn) && (next_square >= 0 && next_square < 64)) {
+                    steps++;
+                    Move move(index, next_square, piece, board[next_square], 0);
                     moves[n_moves] = move;
                     n_moves++;
-                    steps++;
-                    if (((board[next_square] & COLOR_MASK) == (~turn & COLOR_MASK)) || ((board[index] & PIECE_MASK)== KING)) {
-                        break;
-                    }
-                    next_square = index + (direction*steps);
-                    next_rank = (int)(next_square / 8);
-                    next_file = next_square % 8;
+                    if ((piece & PIECE_MASK) == KING || (board[next_square] & COLOR_MASK) == (~turn & COLOR_MASK)) break;
+                    next_square = index + (direction * steps);
                 }
             }
         }
+
         // Orthogonal moves
         if (((piece & PIECE_MASK) == ROOK || (piece & PIECE_MASK) == QUEEN || (piece & PIECE_MASK) == KING) && (piece & COLOR_MASK) == turn) {
-            int orthogonal_move_amount = sizeof(orthogonal_directions) / sizeof(orthogonal_directions[0]);
-            for (int i=0; i<orthogonal_move_amount; i++) {
+            for (int i=0; i<4; i++) {
                 int direction = orthogonal_directions[i];
+                int next_square = index + direction;
                 int steps = 1;
-                int next_square = index + (direction*steps);
-                int next_rank = (int)(next_square / 8);
-                int next_file = next_square % 8;
-                while ((next_rank < 8 && next_rank >= 0 && next_file < 8 && next_file >=0) && ((abs(next_file - file) == steps || abs(next_rank - rank) == steps) && (abs(next_file - file) + abs(next_rank - rank) == steps)) && (next_square >= 0 && next_square < 64) && ((board[next_square] & COLOR_MASK) != turn)) {
-                    Move move(index, next_square, board[index], board[next_square], 0);
+                while ((this->steps_in_direction[index][i] >= steps) && ((board[next_square] & COLOR_MASK) != turn)) {
+                    steps++;
+                    Move move(index, next_square, piece, board[next_square], 0);
                     moves[n_moves] = move;
                     n_moves++;
-                    steps++;
-                    if ((board[next_square] & COLOR_MASK) == (~turn & COLOR_MASK) || ((board[index] & PIECE_MASK)== KING)) {
-                        break;
-                    }
-                    next_square = index + (direction*steps);
-                    next_rank = (int)(next_square / 8);
-                    next_file = next_square % 8;
+                    if ((piece & PIECE_MASK) == KING || ((board[next_square] & COLOR_MASK) == (~turn & COLOR_MASK))) break;
+                    next_square = index + (direction * steps);
                 }
             }
-        }
+        }        
     }
     return moves;
 }
@@ -553,62 +646,62 @@ void Board::update_render() {
         sf::Texture texture;
         switch (this->board[i]) {
             case WHITE_PAWN:
-                texture.loadFromFile("C:/Users/Danny/Documents/Programming/Git Projects/Chengine++/Chengine-pp/assets/whitePawn.png");
+                texture.loadFromFile("C:/Users/danny/Documents/Programming/c++ Chess/Chengine-pp/assets/whitePawn.png");
                 sprite.setTexture(texture);
                 sprite.setPosition(sf::Vector2f(x+12.5, y+12.5));
                 break;
             case WHITE_BISHOP:
-                texture.loadFromFile("C:/Users/Danny/Documents/Programming/Git Projects/Chengine++/Chengine-pp/assets/whiteBishop.png");
+                texture.loadFromFile("C:/Users/danny/Documents/Programming/c++ Chess/Chengine-pp/assets/whiteBishop.png");
                 sprite.setTexture(texture);
                 sprite.setPosition(sf::Vector2f(x+10, y+10));
                 break;
             case WHITE_KNIGHT:
-                texture.loadFromFile("C:/Users/Danny/Documents/Programming/Git Projects/Chengine++/Chengine-pp/assets/whiteKnight.png");
+                texture.loadFromFile("C:/Users/danny/Documents/Programming/c++ Chess/Chengine-pp/assets/whiteKnight.png");
                 sprite.setTexture(texture);
                 sprite.setPosition(sf::Vector2f(x+12.5, y+12.5));
                 break;
             case WHITE_ROOK:
-                texture.loadFromFile("C:/Users/Danny/Documents/Programming/Git Projects/Chengine++/Chengine-pp/assets/whiteRook.png");
+                texture.loadFromFile("C:/Users/danny/Documents/Programming/c++ Chess/Chengine-pp/assets/whiteRook.png");
                 sprite.setTexture(texture);
                 sprite.setPosition(sf::Vector2f(x+12.5, y+12.5));
                 break;
             case WHITE_QUEEN:
-                texture.loadFromFile("C:/Users/Danny/Documents/Programming/Git Projects/Chengine++/Chengine-pp/assets/whiteQueen.png");
+                texture.loadFromFile("C:/Users/danny/Documents/Programming/c++ Chess/Chengine-pp/assets/whiteQueen.png");
                 sprite.setTexture(texture);
                 sprite.setPosition(sf::Vector2f(x+7.5, y+7.5));
                 break;
             case WHITE_KING:
-                texture.loadFromFile("C:/Users/Danny/Documents/Programming/Git Projects/Chengine++/Chengine-pp/assets/whiteKing.png");
+                texture.loadFromFile("C:/Users/danny/Documents/Programming/c++ Chess/Chengine-pp/assets/whiteKing.png");
                 sprite.setTexture(texture);
                 sprite.setPosition(sf::Vector2f(x+10, y+10));
                 break;
             case BLACK_PAWN:
-                texture.loadFromFile("C:/Users/Danny/Documents/Programming/Git Projects/Chengine++/Chengine-pp/assets/blackPawn.png");
+                texture.loadFromFile("C:/Users/danny/Documents/Programming/c++ Chess/Chengine-pp/assets/blackPawn.png");
                 sprite.setTexture(texture);
                 sprite.setPosition(sf::Vector2f(x+12.5, y+12.5));
                 break;
             case BLACK_BISHOP:
-                texture.loadFromFile("C:/Users/Danny/Documents/Programming/Git Projects/Chengine++/Chengine-pp/assets/blackBishop.png");
+                texture.loadFromFile("C:/Users/danny/Documents/Programming/c++ Chess/Chengine-pp/assets/blackBishop.png");
                 sprite.setTexture(texture);
                 sprite.setPosition(sf::Vector2f(x+10, y+10));
                 break;
             case BLACK_KNIGHT:
-                texture.loadFromFile("C:/Users/Danny/Documents/Programming/Git Projects/Chengine++/Chengine-pp/assets/blackKnight.png");
+                texture.loadFromFile("C:/Users/danny/Documents/Programming/c++ Chess/Chengine-pp/assets/blackKnight.png");
                 sprite.setTexture(texture);
                 sprite.setPosition(sf::Vector2f(x+12.5, y+12.5));
                 break;
             case BLACK_ROOK:
-                texture.loadFromFile("C:/Users/Danny/Documents/Programming/Git Projects/Chengine++/Chengine-pp/assets/blackRook.png");
+                texture.loadFromFile("C:/Users/danny/Documents/Programming/c++ Chess/Chengine-pp/assets/blackRook.png");
                 sprite.setTexture(texture);
                 sprite.setPosition(sf::Vector2f(x+12.5, y+12.5));
                 break;
             case BLACK_QUEEN:
-                texture.loadFromFile("C:/Users/Danny/Documents/Programming/Git Projects/Chengine++/Chengine-pp/assets/blackQueen.png");
+                texture.loadFromFile("C:/Users/danny/Documents/Programming/c++ Chess/Chengine-pp/assets/blackQueen.png");
                 sprite.setTexture(texture);
                 sprite.setPosition(sf::Vector2f(x+7.5, y+7.5));
                 break;
             case BLACK_KING:
-                texture.loadFromFile("C:/Users/Danny/Documents/Programming/Git Projects/Chengine++/Chengine-pp/assets/blackKing.png");
+                texture.loadFromFile("C:/Users/danny/Documents/Programming/c++ Chess/Chengine-pp/assets/blackKing.png");
                 sprite.setTexture(texture);
                 sprite.setPosition(sf::Vector2f(x+10, y+10));
                 break;
