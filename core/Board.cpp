@@ -91,7 +91,42 @@ array<int, 64> Board::get_board() {
 }
 
 string Board::get_fen() {
-    return this->fen_string;
+    string fen = "";
+    string symbols_from_piece[6] = {"p", "b", "n", "r", "q", "k"};
+    int empty_squares_rank = 0;
+    for (int rank=0; rank<8; rank++) {
+        empty_squares_rank = 0;
+        for (int file=0; file<8; file++) {
+            int piece = this->board[(rank * 8) + file];
+            if ((piece & COLOR_MASK) != 0) {
+                if (empty_squares_rank > 0) {
+                    fen += to_string(empty_squares_rank);
+                    empty_squares_rank = 0;
+                }
+                string str = symbols_from_piece[(piece & PIECE_MASK)-1];
+                if ((piece & COLOR_MASK) == WHITE) {
+                    for (auto & c: str) c = toupper(c);
+                }
+                fen += str;
+            } else {
+                empty_squares_rank++;
+            }
+        }
+        if (empty_squares_rank > 0) {
+            fen += to_string(empty_squares_rank);
+            empty_squares_rank = 0;
+        }
+        if (rank != 7) {
+            fen += "/";
+        }
+    }
+    fen += ((this->turn & COLOR_MASK) == WHITE) ? " w" : " b";
+    fen += " ";
+    fen += (this->white_castle_kingside) ? "K" : "";
+    fen += (this->white_castle_queenside) ? "Q" : "";
+    fen += (this->black_castle_kingside) ? "k" : "";
+    fen += (this->black_castle_queenside) ? "q" : "";
+    return fen;
 }
 
 void Board::load_fen(string fen_string) {
@@ -137,15 +172,13 @@ void Board::load_fen(string fen_string) {
 }
 
 bool Board::target_is_attacked(int target, int color) {
-    // Pawn piece
+    // Pawn attacked places
     int pawn_direction = (color == WHITE) ? -8 : 8;
     int pawn_attacking_directions[] = {pawn_direction+1, pawn_direction-1};
-    int target_file = target % 8;
     int target_rank = (int)(target / 8);
     for (auto direction : pawn_attacking_directions) {
         int next_square = target + direction;
         int next_rank = (int)(next_square / 8);
-        int next_file = next_square % 8;
         if (((this->board[next_square] & PIECE_MASK) == PAWN) && ((this->board[next_square] & COLOR_MASK) == (~color & COLOR_MASK)) && ((next_rank - target_rank) == (pawn_direction / 8))) {
             return true;
         }
@@ -183,7 +216,6 @@ bool Board::target_is_attacked(int target, int color) {
         int next_square = target + direction;
         int steps = 1;
         while ((this->steps_in_direction[target][i+DIAGONAL_OFFSET] >= steps) && (next_square >= 0 && next_square < 64) && ((this->board[next_square] & COLOR_MASK) != color)) {
-            // cout << "yues" << endl;
             steps++;
             if ((this->board[next_square] & COLOR_MASK) == (~color & COLOR_MASK)) {
                 if ((this->board[next_square] & PIECE_MASK) == QUEEN || (this->board[next_square] & PIECE_MASK) == BISHOP || ((this->board[next_square] & PIECE_MASK) == KING && steps == 1)) {
@@ -199,7 +231,6 @@ bool Board::target_is_attacked(int target, int color) {
 
 bool Board::is_in_check(int color) {
     int king_square;
-    int opposite_color = (~color & COLOR_MASK);
     for (int i=0; i<64; i++) {
         if (this->board[i] == (color | KING)) {
             king_square = i;
@@ -262,10 +293,10 @@ void Board::move_piece(Move move) {
                 this->just_removed_white_castling_kingside = true;
             }
         } else {
-            if (move.start_square == 56 && this->black_castle_queenside) {
+            if (move.start_square == 0 && this->black_castle_queenside) {
                 this->black_castle_queenside = false;
                 this->just_removed_black_castling_queenside = true;
-            } else if (move.start_square == 63 && this->black_castle_kingside) {
+            } else if (move.start_square == 7 && this->black_castle_kingside) {
                 this->black_castle_kingside = false;
                 this->just_removed_black_castling_kingside = true;
             }
@@ -368,15 +399,13 @@ void Board::undo_move(Move move) {
         }
         this->board[move.start_square] = move.moved_piece;
         this->board[move.end_square] = (move.moved_piece & COLOR_MASK) | ROOK;
-        // this->update_attacked_tables();
         return;
     }
 
     // Promote
     if ((move.flag & Move::Flag::promote) == Move::Flag::promote) {
-        this->board[move.start_square] = (this->board[move.end_square] & COLOR_MASK) | PAWN;
+        this->board[move.start_square] = ((this->board[move.end_square] & COLOR_MASK) | PAWN);
         this->board[move.end_square] = move.captured_piece;
-        // this->update_attacked_tables();
         return;
     }
 
@@ -386,13 +415,11 @@ void Board::undo_move(Move move) {
         this->board[move.end_square] = EMPTY;
         int offset = ((this->turn & COLOR_MASK) == WHITE) ? 1 : -1;
         this->board[move.end_square + (offset * 8)] = (~this->turn & COLOR_MASK) | PAWN;
-        // this->update_attacked_tables();
         return;
     }
 
     this->board[move.start_square] = this->board[move.end_square];
     this->board[move.end_square] = move.captured_piece;
-    // this->update_attacked_tables();
 }
 
 bool Board::move_is_legal(Move move) {
@@ -412,7 +439,6 @@ void Board::update_attacked_tables() {
         int color = piece & COLOR_MASK;
         // Pawn attacked places
         if ((piece & PIECE_MASK) == PAWN) {
-            // int direction = pawn_directions.at(color);
             int direction = (color == WHITE) ? -8 : 8;
             this->attacked_squares[this->turn_to_attacked_map(color)][index + direction + 1] = true;
             this->attacked_squares[this->turn_to_attacked_map(color)][index + direction - 1] = true;
@@ -467,8 +493,8 @@ void Board::update_attacked_tables() {
 
 array<Move, 255> Board::get_pseudolegal_moves(Move last_move, array<int, 64> board, int turn) {
     array<Move, 255> moves;
+    moves.fill(Move());
     int n_moves = 0;
-    int opposite_color = ~turn & COLOR_MASK;
     // Castling
     if (turn == WHITE) {
         if ((this->white_castle_kingside == true) && (board[63] == WHITE_ROOK) && (board[60] == WHITE_KING) && (board[62] == EMPTY) && (board[61] == EMPTY)) {
@@ -646,62 +672,62 @@ void Board::update_render() {
         sf::Texture texture;
         switch (this->board[i]) {
             case WHITE_PAWN:
-                texture.loadFromFile("C:/Users/danny/Documents/Programming/c++ Chess/Chengine-pp/assets/whitePawn.png");
+                texture.loadFromFile("C:/Users/Danny/Documents/Programming/Git Projects/Chengine++/Chengine-pp/assets/whitePawn.png");
                 sprite.setTexture(texture);
                 sprite.setPosition(sf::Vector2f(x+12.5, y+12.5));
                 break;
             case WHITE_BISHOP:
-                texture.loadFromFile("C:/Users/danny/Documents/Programming/c++ Chess/Chengine-pp/assets/whiteBishop.png");
+                texture.loadFromFile("C:/Users/Danny/Documents/Programming/Git Projects/Chengine++/Chengine-pp/assets/whiteBishop.png");
                 sprite.setTexture(texture);
                 sprite.setPosition(sf::Vector2f(x+10, y+10));
                 break;
             case WHITE_KNIGHT:
-                texture.loadFromFile("C:/Users/danny/Documents/Programming/c++ Chess/Chengine-pp/assets/whiteKnight.png");
+                texture.loadFromFile("C:/Users/Danny/Documents/Programming/Git Projects/Chengine++/Chengine-pp/assets/whiteKnight.png");
                 sprite.setTexture(texture);
                 sprite.setPosition(sf::Vector2f(x+12.5, y+12.5));
                 break;
             case WHITE_ROOK:
-                texture.loadFromFile("C:/Users/danny/Documents/Programming/c++ Chess/Chengine-pp/assets/whiteRook.png");
+                texture.loadFromFile("C:/Users/Danny/Documents/Programming/Git Projects/Chengine++/Chengine-pp/assets/whiteRook.png");
                 sprite.setTexture(texture);
                 sprite.setPosition(sf::Vector2f(x+12.5, y+12.5));
                 break;
             case WHITE_QUEEN:
-                texture.loadFromFile("C:/Users/danny/Documents/Programming/c++ Chess/Chengine-pp/assets/whiteQueen.png");
+                texture.loadFromFile("C:/Users/Danny/Documents/Programming/Git Projects/Chengine++/Chengine-pp/assets/whiteQueen.png");
                 sprite.setTexture(texture);
                 sprite.setPosition(sf::Vector2f(x+7.5, y+7.5));
                 break;
             case WHITE_KING:
-                texture.loadFromFile("C:/Users/danny/Documents/Programming/c++ Chess/Chengine-pp/assets/whiteKing.png");
+                texture.loadFromFile("C:/Users/Danny/Documents/Programming/Git Projects/Chengine++/Chengine-pp/assets/whiteKing.png");
                 sprite.setTexture(texture);
                 sprite.setPosition(sf::Vector2f(x+10, y+10));
                 break;
             case BLACK_PAWN:
-                texture.loadFromFile("C:/Users/danny/Documents/Programming/c++ Chess/Chengine-pp/assets/blackPawn.png");
+                texture.loadFromFile("C:/Users/Danny/Documents/Programming/Git Projects/Chengine++/Chengine-pp/assets/blackPawn.png");
                 sprite.setTexture(texture);
                 sprite.setPosition(sf::Vector2f(x+12.5, y+12.5));
                 break;
             case BLACK_BISHOP:
-                texture.loadFromFile("C:/Users/danny/Documents/Programming/c++ Chess/Chengine-pp/assets/blackBishop.png");
+                texture.loadFromFile("C:/Users/Danny/Documents/Programming/Git Projects/Chengine++/Chengine-pp/assets/blackBishop.png");
                 sprite.setTexture(texture);
                 sprite.setPosition(sf::Vector2f(x+10, y+10));
                 break;
             case BLACK_KNIGHT:
-                texture.loadFromFile("C:/Users/danny/Documents/Programming/c++ Chess/Chengine-pp/assets/blackKnight.png");
+                texture.loadFromFile("C:/Users/Danny/Documents/Programming/Git Projects/Chengine++/Chengine-pp/assets/blackKnight.png");
                 sprite.setTexture(texture);
                 sprite.setPosition(sf::Vector2f(x+12.5, y+12.5));
                 break;
             case BLACK_ROOK:
-                texture.loadFromFile("C:/Users/danny/Documents/Programming/c++ Chess/Chengine-pp/assets/blackRook.png");
+                texture.loadFromFile("C:/Users/Danny/Documents/Programming/Git Projects/Chengine++/Chengine-pp/assets/blackRook.png");
                 sprite.setTexture(texture);
                 sprite.setPosition(sf::Vector2f(x+12.5, y+12.5));
                 break;
             case BLACK_QUEEN:
-                texture.loadFromFile("C:/Users/danny/Documents/Programming/c++ Chess/Chengine-pp/assets/blackQueen.png");
+                texture.loadFromFile("C:/Users/Danny/Documents/Programming/Git Projects/Chengine++/Chengine-pp/assets/blackQueen.png");
                 sprite.setTexture(texture);
                 sprite.setPosition(sf::Vector2f(x+7.5, y+7.5));
                 break;
             case BLACK_KING:
-                texture.loadFromFile("C:/Users/danny/Documents/Programming/c++ Chess/Chengine-pp/assets/blackKing.png");
+                texture.loadFromFile("C:/Users/Danny/Documents/Programming/Git Projects/Chengine++/Chengine-pp/assets/blackKing.png");
                 sprite.setTexture(texture);
                 sprite.setPosition(sf::Vector2f(x+10, y+10));
                 break;

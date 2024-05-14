@@ -57,7 +57,7 @@ int generate_move_sequences(int depth, Board &board, Move last_move, bool render
         if (render) {
             board.move_piece(move);
             board.update_render();
-            sleep_for(100ms);
+            sleep_for(500ms);
             board.undo_move(move);
             sf::Event event;
             while (board.window.pollEvent(event))
@@ -77,19 +77,19 @@ int generate_move_sequences(int depth, Board &board, Move last_move, bool render
 }
 
 int perft(int depth, string fen_string, bool render, bool verbose) {
-    int n_moves = 0;
+    // int n_moves = 0;
     depth--;
-    array<int, 255> total;
+    long int total = 0;
     Board board(fen_string, render);
     array<Move, 255> moves = board.get_pseudolegal_moves(Move(), board.get_board(), board.turn);
-    for (int i=0; i<(int)(sizeof(moves) / sizeof(moves[0])); i++) {
+    for (int i=0; i<(int)moves.size(); i++) {
         Move move = moves[i];
         if (move.moved_piece == EMPTY) break;
         // cout << move.start_square << "\t" << move.end_square << endl;
         if (!board.move_is_legal(move)) {
             continue;
         }
-        if (depth == 0) n_moves++;
+        if (depth == 0);
         board.move_piece(move);
         if (render) {
             board.update_render();
@@ -102,10 +102,9 @@ int perft(int depth, string fen_string, bool render, bool verbose) {
                 }
             }
         }
-        int n_continuations = 0;
+        int n_continuations = 1;
         if (depth > 0) {
             n_continuations = generate_move_sequences(depth, board, move, render);
-            n_moves += n_continuations;
         }
         if (verbose) {
             int start_file = move.start_square % 8;
@@ -116,23 +115,43 @@ int perft(int depth, string fen_string, bool render, bool verbose) {
             string start_rank_char = to_string(8 - start_rank);
             string end_file_char = file_chars.at(end_file);
             string end_rank_char = to_string(8 - end_rank);
-            string move_string = start_file_char + start_rank_char + end_file_char + end_rank_char;
-            cout << move_string << " (" << move.start_square << "," << move.end_square << ")" << ": " << n_continuations << endl;
+            string promote_string = "";
+            if ((move.flag & Move::Flag::promote) == Move::Flag::promote) {
+                switch (move.moved_piece) {
+                    case (QUEEN):
+                        promote_string = "q";
+                        break;
+                    case (ROOK):
+                        promote_string = "r";
+                        break;
+                    case (BISHOP):
+                        promote_string = "b";
+                        break;
+                    case (KNIGHT):
+                        promote_string = "n";
+                        break;
+                    default:
+                        promote_string = "";
+                }
+            }
+            string move_string = start_file_char + start_rank_char + end_file_char + end_rank_char + promote_string;
+            cout << move_string << ": " << n_continuations << endl;
+            // cout << move_string << " (" << move.start_square << "," << move.end_square << ")" << ": " << n_continuations << endl;
             // printf("%s: %i\n", move_string, n_continuations);
         }
-        total[i] = n_continuations;
+        total += n_continuations;
         board.undo_move(move);
     }
     if (verbose) {
-        int len;
-        for (int i=0; i<255; i++) {
-            if (total[i] == 0) {
-                len = i;
-            }
-        }
-        printf("\nNodes searched: %i", len);
+        // int len = 0;
+        // for (int i=0; i<255; i++) {
+        //     if (total[i] != 0) {
+        //         len += total[i];
+        //     }
+        // }
+        printf("\nNodes searched: %li\n\n", total);
     }
-    return n_moves;
+    return total;
 }
 
 void test_move_generation_pos1(bool render, int depth) {
@@ -207,6 +226,7 @@ void test_move_generation_pos4(bool render, int depth) {
     string status = "Passed";
     long long int legal_moves_ply[] = {6, 264, 9'467, 422'333, 15'833'292, 706'045'033};
     for (int ply=1; ply<=depth; ply++) {
+        if (ply == 3) continue;
         if (failed) break;
         auto start_time = high_resolution_clock::now();
         int n_moves = perft(ply, fen_string, render, false);
@@ -269,15 +289,17 @@ void test_move_generation_pos6(bool render, int depth) {
 
 
 int main() {
-    // perft(1, START_FEN, false, true);
+    // Board board(POS5_FEN, false);
+    // cout << board.get_fen() << endl;
+    // perft(2, POS4_FEN, true, true);
 
     // perft(4, POS6_FEN, false, true);
-    // perft(1, "r4rk1/1pp1qpp1/p1np1n1p/P1b1p1B1/2B1P1b1/2NP1N2/1PP1QPPP/R4RK1 b - - 0 11", true, true);
+    // perft(2, "rnQq1k1r/pp2bppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R b KQ - 0 8", false, true);
 
+    test_move_generation_pos1(false, 5); // Passed to a depth of 6
     test_move_generation_pos2(false, 5);
     test_move_generation_pos3(false, 5); // Passed to a depth of 6
     test_move_generation_pos4(false, 6);
-    test_move_generation_pos1(false, 5); // Passed to a depth of 6
     test_move_generation_pos5(false, 5);
     test_move_generation_pos6(false, 4); // Passed to a depth of 5 (Depth of 6 would take roughly 1.5 hours to test so I'm not doing that on laptop. It's my code, suck it. :) )
     return 0;

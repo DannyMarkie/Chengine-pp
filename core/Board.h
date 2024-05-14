@@ -66,7 +66,7 @@ class Board {
         /**
          * @brief board from Fen string.
          * 
-         * @param fen_string Fen string in the form of a std::string
+         * @param fen_string Fen string in the form of a std::string.
         */
         void load_fen(string fen_string);
 
