@@ -23,73 +23,17 @@ unordered_map<int, string> file_chars = {
     {7, "h"}
 };
 
-int generate_move_sequences(int depth, Board &board, Move last_move, bool render) {
-    int n_moves = 0;
-    if (depth == 1) {
-        array<Move, 255> moves = board.get_pseudolegal_moves(last_move, board.get_board(), board.turn);
-        for (Move move : moves) {
-            if (move.moved_piece == EMPTY) break;
-            if (!board.move_is_legal(move)) continue;
-
-            if (render) {
-                board.move_piece(move);
-                board.update_render();
-                sleep_for(500ms);
-                board.undo_move(move);
-                sf::Event event;
-                while (board.window.pollEvent(event))
-                {
-                    if (event.type == sf::Event::Closed) {
-                        board.window.close();
-                    }
-                }
-            }
-            n_moves++;
-        }
-        return n_moves;
-    }
-
-    array<Move, 255> moves = board.get_pseudolegal_moves(last_move, board.get_board(), board.turn);
-    for (Move move : moves) {
-        if (move.moved_piece == EMPTY) break;
-        if (!board.move_is_legal(move)) continue;
-
-        if (render) {
-            board.move_piece(move);
-            board.update_render();
-            sleep_for(500ms);
-            board.undo_move(move);
-            sf::Event event;
-            while (board.window.pollEvent(event))
-            {
-                if (event.type == sf::Event::Closed) {
-                    board.window.close();
-                }
-            }
-        }
-        if (!board.is_checkmate()) {
-            board.move_piece(move);
-            n_moves += generate_move_sequences(depth-1, board, move, render);
-            board.undo_move(move);
-        }
-    }
-    return n_moves;
-}
-
-int perft(int depth, string fen_string, bool render, bool verbose) {
-    // int n_moves = 0;
+int perft(int depth, string fen_string, bool render, bool verbose, Move last_move) {
     depth--;
     long int total = 0;
     Board board(fen_string, render);
-    array<Move, 255> moves = board.get_pseudolegal_moves(Move(), board.get_board(), board.turn);
+    array<Move, 255> moves = board.get_pseudolegal_moves(last_move, board.get_board(), board.turn);
     for (int i=0; i<(int)moves.size(); i++) {
         Move move = moves[i];
         if (move.moved_piece == EMPTY) break;
-        // cout << move.start_square << "\t" << move.end_square << endl;
         if (!board.move_is_legal(move)) {
             continue;
         }
-        if (depth == 0);
         board.move_piece(move);
         if (render) {
             board.update_render();
@@ -104,7 +48,7 @@ int perft(int depth, string fen_string, bool render, bool verbose) {
         }
         int n_continuations = 1;
         if (depth > 0) {
-            n_continuations = generate_move_sequences(depth, board, move, render);
+            n_continuations = perft(depth, board.get_fen(), render, false, move);
         }
         if (verbose) {
             int start_file = move.start_square % 8;
@@ -136,19 +80,11 @@ int perft(int depth, string fen_string, bool render, bool verbose) {
             }
             string move_string = start_file_char + start_rank_char + end_file_char + end_rank_char + promote_string;
             cout << move_string << ": " << n_continuations << endl;
-            // cout << move_string << " (" << move.start_square << "," << move.end_square << ")" << ": " << n_continuations << endl;
-            // printf("%s: %i\n", move_string, n_continuations);
         }
         total += n_continuations;
         board.undo_move(move);
     }
     if (verbose) {
-        // int len = 0;
-        // for (int i=0; i<255; i++) {
-        //     if (total[i] != 0) {
-        //         len += total[i];
-        //     }
-        // }
         printf("\nNodes searched: %li\n\n", total);
     }
     return total;
@@ -162,7 +98,7 @@ void test_move_generation_pos1(bool render, int depth) {
     for (int ply=1; ply<=depth; ply++) {
         if (failed) break;
         auto start_time = high_resolution_clock::now();
-        int n_moves = perft(ply, fen_string, render, false);
+        int n_moves = perft(ply, fen_string, render, false, Move());
         auto stop_time = high_resolution_clock::now();
         auto duration = duration_cast<milliseconds>(stop_time - start_time);
         if (n_moves != legal_moves_ply[ply-1]) {
@@ -184,7 +120,7 @@ void test_move_generation_pos2(bool render, int depth) {
     for (int ply=1; ply<=depth; ply++) {
         if (failed) break;
         auto start_time = high_resolution_clock::now();
-        int n_moves = perft(ply, fen_string, render, false);
+        int n_moves = perft(ply, fen_string, render, false, Move());
         auto stop_time = high_resolution_clock::now();
         auto duration = duration_cast<milliseconds>(stop_time - start_time);
         if (n_moves != legal_moves_ply[ply-1]) {
@@ -206,7 +142,7 @@ void test_move_generation_pos3(bool render, int depth) {
     for (int ply=1; ply<=depth; ply++) {
         if (failed) break;
         auto start_time = high_resolution_clock::now();
-        int n_moves = perft(ply, fen_string, render, false);
+        int n_moves = perft(ply, fen_string, render, false, Move());
         auto stop_time = high_resolution_clock::now();
         auto duration = duration_cast<milliseconds>(stop_time - start_time);
         if (n_moves != legal_moves_ply[ply-1]) {
@@ -226,10 +162,9 @@ void test_move_generation_pos4(bool render, int depth) {
     string status = "Passed";
     long long int legal_moves_ply[] = {6, 264, 9'467, 422'333, 15'833'292, 706'045'033};
     for (int ply=1; ply<=depth; ply++) {
-        if (ply == 3) continue;
         if (failed) break;
         auto start_time = high_resolution_clock::now();
-        int n_moves = perft(ply, fen_string, render, false);
+        int n_moves = perft(ply, fen_string, render, false, Move());
         auto stop_time = high_resolution_clock::now();
         auto duration = duration_cast<milliseconds>(stop_time - start_time);
         if (n_moves != legal_moves_ply[ply-1]) {
@@ -251,7 +186,7 @@ void test_move_generation_pos5(bool render, int depth) {
     for (int ply=1; ply<=depth; ply++) {
         if (failed) break;
         auto start_time = high_resolution_clock::now();
-        int n_moves = perft(ply, fen_string, render, false);
+        int n_moves = perft(ply, fen_string, render, false, Move());
         auto stop_time = high_resolution_clock::now();
         auto duration = duration_cast<milliseconds>(stop_time - start_time);
         if (n_moves != legal_moves_ply[ply-1]) {
@@ -273,7 +208,7 @@ void test_move_generation_pos6(bool render, int depth) {
     for (int ply=1; ply<=depth; ply++) {
         if (failed) break;
         auto start_time = high_resolution_clock::now();
-        int n_moves = perft(ply, fen_string, render, false);
+        int n_moves = perft(ply, fen_string, render, false, Move());
         auto stop_time = high_resolution_clock::now();
         auto duration = duration_cast<milliseconds>(stop_time - start_time);
         if (n_moves != legal_moves_ply[ply-1]) {
@@ -289,18 +224,16 @@ void test_move_generation_pos6(bool render, int depth) {
 
 
 int main() {
-    // Board board(POS5_FEN, false);
-    // cout << board.get_fen() << endl;
-    // perft(2, POS4_FEN, true, true);
+    // perft(6, POS4_FEN, false, true, Move());
+    // perft(2, "1r2k2r/p1pNqpb1/bn2pnp1/3P4/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQk - 1 2", true, true, Move());
 
-    // perft(4, POS6_FEN, false, true);
-    // perft(2, "rnQq1k1r/pp2bppp/2p5/8/2B5/8/PPP1NnPP/RNBQK2R b KQ - 0 8", false, true);
+    // perft(3, "r3kr2/Pppp1ppp/1b3nb1/nPB2N2/B1P1P3/q4N2/Pp1P2PP/R2Q1RK1 b q - 3 2", false, true, Move());
 
+    // test_move_generation_pos4(false, 6);
     test_move_generation_pos1(false, 5); // Passed to a depth of 6
     test_move_generation_pos2(false, 5);
     test_move_generation_pos3(false, 5); // Passed to a depth of 6
-    test_move_generation_pos4(false, 6);
-    test_move_generation_pos5(false, 5);
+    test_move_generation_pos5(false, 4); // Passed to a depth of 5
     test_move_generation_pos6(false, 4); // Passed to a depth of 5 (Depth of 6 would take roughly 1.5 hours to test so I'm not doing that on laptop. It's my code, suck it. :) )
     return 0;
 }

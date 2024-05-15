@@ -260,22 +260,22 @@ void Board::move_piece(Move move) {
 
     // Remove castling rights if rook gets taken
     if ((move.captured_piece & PIECE_MASK) == ROOK) {
-        int file = move.end_square % 8;
+        // int file = move.end_square % 8;
         if ((move.captured_piece & COLOR_MASK) == WHITE) {
             // If castling rights are not yet removed, remove it
-            if (file == 0 && !this->removed_white_castle_queenside) {
+            if (move.end_square == 56 && !this->removed_white_castle_queenside) {
                 this->white_castle_queenside = false;
                 this->just_removed_white_castling_queenside = true;
-            } else if (!this->removed_white_castle_kingside) {
+            } else if (move.end_square == 63 && !this->removed_white_castle_kingside) {
                 this->white_castle_kingside = false;
                 this->just_removed_white_castling_kingside = true;
             }
         } else {
             // If castling rights are not yet removed, remove it
-            if (file == 0 && !this->removed_black_castle_queenside) {
+            if (move.end_square == 0 && !this->removed_black_castle_queenside) {
                 this->black_castle_queenside = false;
                 this->just_removed_black_castling_queenside = true;
-            } else if (!this->removed_black_castle_kingside) {
+            } else if (move.end_square == 7 && !this->removed_black_castle_kingside) {
                 this->black_castle_kingside = false;
                 this->just_removed_black_castling_kingside = true;
             }
@@ -310,7 +310,7 @@ void Board::move_piece(Move move) {
             this->white_castle_queenside = false;
             this->just_removed_white_castling_kingside = true;
             this->just_removed_white_castling_queenside = true;
-        } else if ((move.moved_piece & COLOR_MASK) == BLACK && this->black_castle_kingside && black_castle_queenside) {
+        } else if ((move.moved_piece & COLOR_MASK) == BLACK && (this->black_castle_kingside && black_castle_queenside)) {
             this->black_castle_kingside = false;
             this->black_castle_queenside = false;
             this->just_removed_black_castling_kingside = true;
@@ -340,7 +340,6 @@ void Board::move_piece(Move move) {
             this->board[move.start_square + 2] = move.moved_piece;
             this->board[move.start_square + 1] = (move.moved_piece & COLOR_MASK) | ROOK;
         }
-        // this->update_attacked_tables();
         return;
     }
 
@@ -348,7 +347,6 @@ void Board::move_piece(Move move) {
     if ((move.flag & Move::Flag::promote) == Move::Flag::promote) {
         this->board[move.end_square] = (this->board[move.start_square] & COLOR_MASK) | move.moved_piece;
         this->board[move.start_square] = EMPTY;
-        // this->update_attacked_tables();
         return;
     }
 
@@ -359,13 +357,11 @@ void Board::move_piece(Move move) {
         this->board[move.end_square] = this->board[move.start_square];
         this->board[move.start_square] = EMPTY;
         this->board[move.start_square + end_file - start_file] = EMPTY;
-        // this->update_attacked_tables();
         return;
     }
 
     this->board[move.end_square] = this->board[move.start_square];
     this->board[move.start_square] = EMPTY;
-    // this->update_attacked_tables();
 }
 
 void Board::undo_move(Move move) {
