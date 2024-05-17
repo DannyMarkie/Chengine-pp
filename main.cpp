@@ -3,6 +3,8 @@
 #include <chrono>
 #include <thread>
 #include "core/Board.h"
+#include "core/Match.h"
+#include "bots/RandomBot.h"
 
 using namespace std;
 using namespace std::this_thread;
@@ -18,19 +20,7 @@ int get_length(array<Move, 255> moves) {
 }
 
 int main() {
-    Board board(START_FEN, true);
-    array<Move, 255> moves = board.get_pseudolegal_moves(Move(), board.board, board.turn);
-    int n_moves = get_length(moves);
-    
-    printf("Amount of pseudolegal moves: %i\n", n_moves);
-
-    for (int i=0; i<n_moves; i++) {
-        board.move_piece(moves[i]);
-        board.update_render();
-        sleep_for(300ms);
-        board.undo_move(moves[i]);
-        board.update_render();
-        sleep_for(50ms);
-    }
+    Match match(new RandomBot(), new RandomBot());
+    match.play();
     return 0;
 }

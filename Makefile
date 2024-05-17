@@ -8,8 +8,8 @@ CFLAGS = -g -Wall -IC:\SFML-2.6.1\include -LC:\SFML-2.6.1\lib
 LIBS = -lsfml-graphics-s-d -lsfml-window-s-d -lsfml-system-s-d -lopengl32 -lfreetype -lwinmm -lgdi32
 
 # Targets needed to bring the executable up to date
-main: main.o Board.o Pieces.o Move.o
-	$(CC) -o main main.o Board.o Pieces.o Move.o $(CFLAGS) $(LIBS)
+main: main.o Board.o Pieces.o Move.o Match.o RandomBot.o
+	$(CC) -o main main.o Board.o Pieces.o Move.o Match.o RandomBot.o $(CFLAGS) $(LIBS)
 
 main.o: main.cpp core/Board.h core/Pieces.h
 	$(CC) -c main.cpp $(CFLAGS) $(LIBS)
@@ -23,5 +23,11 @@ Pieces.o: core/Pieces.cpp
 Move.o: core/Move.cpp
 	$(CC) -c core/Move.cpp $(CFLAGS) $(LIBS)
 
+Match.o: core/Match.cpp bots/Bot.h
+	$(CC) -c core/Match.cpp $(CFLAGS) $(LIBS)
+
+RandomBot.o: bots/RandomBot.cpp bots/Bot.h
+	$(CC) -c bots/RandomBot.cpp $(CFLAGS) $(LIBS)
+
 clean:
-	$(RM) main.o Board.o Pieces.o
+	$(RM) main.o Board.o Pieces.o Move.o Match.o RandomBot.o

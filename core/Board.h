@@ -150,6 +150,11 @@ class Board {
         bool is_checkmate();
 
         /**
+         * @brief Returns if the board has legal moves remaining/
+        */
+        bool has_legal_moves();
+
+        /**
          * @brief Moves a piece on the board.
          * 
          * @param move The move to make.

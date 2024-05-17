@@ -227,13 +227,13 @@ int main() {
     // perft(6, POS4_FEN, false, true, Move());
     // perft(2, "1r2k2r/p1pNqpb1/bn2pnp1/3P4/1p2P3/2N2Q1p/PPPBBPPP/R3K2R w KQk - 1 2", true, true, Move());
 
-    // perft(3, "r3kr2/Pppp1ppp/1b3nb1/nPB2N2/B1P1P3/q4N2/Pp1P2PP/R2Q1RK1 b q - 3 2", false, true, Move());
+    perft(5, "r3k2r/Pppp1ppp/1b3nbN/nPB5/B1P1P3/q4N2/Pp1P2PP/R2Q1RK1 b kq - 1 1", false, true, Move());
 
     // test_move_generation_pos4(false, 6);
-    test_move_generation_pos1(false, 5); // Passed to a depth of 6
-    test_move_generation_pos2(false, 5);
-    test_move_generation_pos3(false, 5); // Passed to a depth of 6
-    test_move_generation_pos5(false, 4); // Passed to a depth of 5
-    test_move_generation_pos6(false, 4); // Passed to a depth of 5 (Depth of 6 would take roughly 1.5 hours to test so I'm not doing that on laptop. It's my code, suck it. :) )
+    // test_move_generation_pos1(false, 5); // Passed to a depth of 6
+    // test_move_generation_pos2(false, 5);
+    // test_move_generation_pos3(false, 5); // Passed to a depth of 6
+    // test_move_generation_pos5(false, 4); // Passed to a depth of 5
+    // test_move_generation_pos6(false, 4); // Passed to a depth of 5 (Depth of 6 would take roughly 1.5 hours to test so I'm not doing that on laptop. It's my code, suck it. :) )
     return 0;
 }

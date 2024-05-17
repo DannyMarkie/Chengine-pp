@@ -197,7 +197,7 @@ bool Board::target_is_attacked(int target, int color) {
     for (int i=0; i<4; i++) {
         int direction = orthogonal_directions[i];
         int next_square = target + direction;
-        int steps = 1;
+        int steps = 0;
         while ((this->steps_in_direction[target][i] >= steps) && ((this->board[next_square] & COLOR_MASK) != color)) {
             steps++;
             if ((this->board[next_square] & COLOR_MASK) == (~color & COLOR_MASK)) {
@@ -214,7 +214,7 @@ bool Board::target_is_attacked(int target, int color) {
     for (int i=0; i<4; i++) {
         int direction = diagonal_directions[i];
         int next_square = target + direction;
-        int steps = 1;
+        int steps = 0;
         while ((this->steps_in_direction[target][i+DIAGONAL_OFFSET] >= steps) && (next_square >= 0 && next_square < 64) && ((this->board[next_square] & COLOR_MASK) != color)) {
             steps++;
             if ((this->board[next_square] & COLOR_MASK) == (~color & COLOR_MASK)) {
@@ -251,6 +251,17 @@ bool Board::is_checkmate() {
     return (this->is_in_check(this->turn) && n_moves == 0);
 }
 
+bool Board::has_legal_moves() {
+    array<Move, 255> moves = this->get_pseudolegal_moves(Move(), this->board, this->turn);
+    int n_illegal_moves = 0;
+    for (int i=0; i<255; i++) {
+        Move move = moves[i];
+        if (move.moved_piece == EMPTY) return ((i-n_illegal_moves)>0);
+        if (!this->move_is_legal(move)) n_illegal_moves++;
+    }
+    return false;
+}
+
 void Board::move_piece(Move move) {
     this->turn = (~turn & COLOR_MASK);
     this->just_removed_white_castling_kingside = false;
@@ -260,7 +271,6 @@ void Board::move_piece(Move move) {
 
     // Remove castling rights if rook gets taken
     if ((move.captured_piece & PIECE_MASK) == ROOK) {
-        // int file = move.end_square % 8;
         if ((move.captured_piece & COLOR_MASK) == WHITE) {
             // If castling rights are not yet removed, remove it
             if (move.end_square == 56 && !this->removed_white_castle_queenside) {
