@@ -3,6 +3,9 @@
 #include "../core/Move.h"
 #include "../core/Board.h"
 
+/**
+ * Abstract bot class so that any bot can be passed to a match.
+*/
 class Bot {
     public:
         virtual Move get_move(Board& board) = 0;

@@ -19,6 +19,7 @@ class Match {
         Bot* bot1;
         Bot* bot2;
         Board board = Board(START_FEN, true);
+        std::unordered_map<string, int> positions;
         bool render;
         int winner;
         int moves_since_pawn_push = 0;

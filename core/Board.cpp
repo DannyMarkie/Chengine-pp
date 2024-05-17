@@ -171,6 +171,59 @@ void Board::load_fen(string fen_string) {
     return;
 }
 
+int Board::square_mobility(int square, int color) {
+    int n_moves = 0;
+    // // Pawn attacked places
+    // int pawn_direction = (color == WHITE) ? -8 : 8;
+    // int pawn_attacking_directions[] = {pawn_direction+1, pawn_direction-1};
+    // int target_rank = (int)(square / 8);
+    // for (auto direction : pawn_attacking_directions) {
+    //     int next_square = square + direction;
+    //     int next_rank = (int)(next_square / 8);
+    //     if (((this->board[next_square] & PIECE_MASK) == PAWN) && ((this->board[next_square] & COLOR_MASK) == (~color & COLOR_MASK)) && ((next_rank - target_rank) == (pawn_direction / 8))) {
+    //         n_moves++;
+    //     }
+    // }
+
+    // Knight attacked places
+    for (int i=0; i<8; i++) {
+        int direction = knight_directions[i];
+        int next_square = square + direction;
+        if ((this->steps_in_direction[square][i+KNIGHT_OFFSET] == 1) && ((this->board[next_square] & COLOR_MASK) != color) && (next_square >= 0 && next_square < 64)) {
+            n_moves++;
+        }
+    }
+
+    // Orthogonally attacked places
+    for (int i=0; i<4; i++) {
+        int direction = orthogonal_directions[i];
+        int next_square = square + direction;
+        int steps = 0;
+        while ((this->steps_in_direction[square][i] >= steps) && ((this->board[next_square] & COLOR_MASK) != color)) {
+            steps++;
+            if ((this->board[next_square] & COLOR_MASK) != color) {
+                n_moves++;
+            }
+            next_square = square + (direction * steps);
+        }
+    }
+
+    // Diagonally attacked places
+    for (int i=0; i<4; i++) {
+        int direction = diagonal_directions[i];
+        int next_square = square + direction;
+        int steps = 0;
+        while ((this->steps_in_direction[square][i+DIAGONAL_OFFSET] >= steps) && (next_square >= 0 && next_square < 64) && ((this->board[next_square] & COLOR_MASK) != color)) {
+            steps++;
+            if ((this->board[next_square] & COLOR_MASK) != color) {
+                n_moves++;
+            }
+            next_square = square + (direction * steps);
+        }
+    }
+    return n_moves;
+}
+
 bool Board::target_is_attacked(int target, int color) {
     // Pawn attacked places
     int pawn_direction = (color == WHITE) ? -8 : 8;

@@ -109,6 +109,15 @@ class Board {
         string get_fen();
 
         /**
+         * Calculates the mobility from a square as if there was a superpiece occupying the square.
+         * 
+         * @param square The index of the square which needs to be checked.
+         * @param color The color of the piece on the square.
+         * @return Int the amount of moves from the given square.
+        */
+        int square_mobility(int square, int color);
+
+        /**
          * @brief Returns a boolean on whether or not a certain index is attacked by opposing pieces.
          * 
          * @param target The index of the target which needs to be checked.
