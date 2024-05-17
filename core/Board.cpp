@@ -294,11 +294,11 @@ bool Board::is_in_check(int color) {
 }
 
 bool Board::is_checkmate() {
-    int n_moves;
+    int n_moves = 0;
     array<Move, 255> moves = this->get_pseudolegal_moves(Move(), this->get_board(), this->turn);
     for (Move move : moves) {
         if (move.moved_piece == EMPTY) break;
-        if (!this->move_is_legal(move)) break;
+        if (!this->move_is_legal(move)) continue;
         n_moves++;
     }
     return (this->is_in_check(this->turn) && n_moves == 0);

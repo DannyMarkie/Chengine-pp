@@ -62,6 +62,7 @@ int Match::play() {
         }
     }
     // When the game is over, print the winner and show the final position for 10 more seconds.
+    cout << this->board.is_checkmate() << endl;
     cout << this->winner << endl;
     if (this->board.render) {
         this->board.update_render();
