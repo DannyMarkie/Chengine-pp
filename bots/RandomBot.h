@@ -9,9 +9,9 @@ class RandomBot : public Bot {
 
         Move get_move(Board &board);
 
-        int* search(Board board, int depth, Move last_move) {}
+        int* search(Board& board, int depth, Move last_move, bool isWhite) {return {0};}
 
-        int evaluate(Board board) {}
+        int evaluate(Board& board) {return 0;}
 };
 
 #endif

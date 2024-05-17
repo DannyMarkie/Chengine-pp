@@ -7,9 +7,9 @@ class Bot {
     public:
         virtual Move get_move(Board& board) = 0;
 
-        virtual int* search(Board board, int depth, Move last_move) = 0;
+        virtual int* search(Board& board, int depth, Move last_move, int isWhite) = 0;
 
-        virtual int evaluate(Board board) = 0;
+        virtual int evaluate(Board& board) = 0;
 };
 
 #endif
