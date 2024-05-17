@@ -9,7 +9,7 @@ class RandomBot : public Bot {
 
         Move get_move(Board &board);
 
-        int* search(Board& board, int depth, Move last_move, int isWhite) {return {0};}
+        int* search(Board& board, int start_depth, int depth, Move last_move, int isWhite) {return {0};}
 
         int evaluate(Board& board) {return 0;}
 };
