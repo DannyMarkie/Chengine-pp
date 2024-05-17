@@ -8,8 +8,8 @@ CFLAGS = -g -Wall -IC:\SFML-2.6.1\include -LC:\SFML-2.6.1\lib
 LIBS = -lsfml-graphics-s-d -lsfml-window-s-d -lsfml-system-s-d -lopengl32 -lfreetype -lwinmm -lgdi32
 
 # Targets needed to bring the executable up to date
-main: main.o Board.o Pieces.o Move.o Match.o RandomBot.o NegamaxV1.o IterativeDeepeningV2.o
-	$(CC) -o main main.o Board.o Pieces.o Move.o Match.o RandomBot.o NegamaxV1.o IterativeDeepeningV2.o $(CFLAGS) $(LIBS)
+main: main.o Board.o Pieces.o Move.o Match.o RandomBot.o NegamaxV1.o IterativeDeepeningV2.o AlphaBetaPruningV3.o
+	$(CC) -o main main.o Board.o Pieces.o Move.o Match.o RandomBot.o NegamaxV1.o IterativeDeepeningV2.o AlphaBetaPruningV3.o $(CFLAGS) $(LIBS)
 
 main.o: main.cpp core/Board.h core/Pieces.h
 	$(CC) -c main.cpp $(CFLAGS) $(LIBS)
@@ -35,5 +35,8 @@ NegamaxV1.o: bots/NegamaxV1.cpp bots/Bot.h core/Pieces.h
 IterativeDeepeningV2.o: bots/IterativeDeepeningV2.cpp bots/Bot.h core/Pieces.h
 	$(CC) -c bots/IterativeDeepeningV2.cpp $(CFLAGS) $(LIBS)
 
+AlphaBetaPruningV3.o: bots/AlphaBetaPruningV3.cpp bots/Bot.h core/Pieces.h
+	$(CC) -c bots/AlphaBetaPruningV3.cpp $(CFLAGS) $(LIBS)
+
 clean:
-	$(RM) main.o Board.o Pieces.o Move.o Match.o RandomBot.o NegamaxV1.o
+	$(RM) main.o Board.o Pieces.o Move.o Match.o RandomBot.o NegamaxV1.o IterativeDeepeningV2.o AlphaBetaPruningV3.o

@@ -1,10 +1,10 @@
-#ifndef ITERATIVEDEEPENINGV2_H
-#define ITERATIVEDEEPENINGV2_H
+#ifndef ALPHABETAPRUNING_H
+#define ALPHABETAPRUNING_H
 #include <chrono>
 #include "Bot.h"
 #include "../core/Pieces.h"
 
-class IterativeDeepeningV2 : public Bot {
+class AlphaBetaPruningV3 : public Bot {
     private:
         std::chrono::high_resolution_clock::time_point search_start_time;
         int think_time_ms;
@@ -14,7 +14,7 @@ class IterativeDeepeningV2 : public Bot {
         int best_move_index;
 
     public:
-        IterativeDeepeningV2();
+        AlphaBetaPruningV3();
 
         /**
          * Uses the search function in order to get the best move at a depth of 3.

@@ -21,7 +21,7 @@ class NegamaxV1 : public Bot {
          * 
          * @return Integer array with 2 values, index 0 has the index of the best move and index 1 has the evaluation for the current position.
         */
-        int* search(Board& board, int start_depth, int depth, Move last_move, int isWhite);
+        int* search(Board& board, int start_depth, int depth, Move last_move, int isWhite, int alpha, int beta);
 
         /**
          * Calculates the evaluation for the current position based on how many pieces each player has and how much mobility.

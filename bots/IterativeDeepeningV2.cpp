@@ -15,10 +15,12 @@ Move IterativeDeepeningV2::get_move(Board& board) {
     this->search_start_time = std::chrono::high_resolution_clock::now();
     this->best_move_index = 0;
     this->best_move_last_iteration = Move();
+    int alpha = 0;
+    int beta = 0;
     // Think 1 depth deeper every iteration until total allowed think time has been reached.
     while (!this->think_timeout) {
         depth++;
-        int* current = this->search(board, depth, depth, Move(), isWhite); // index 0 is the move index, index 1 is the eval.
+        int* current = this->search(board, depth, depth, Move(), isWhite, alpha, beta); // index 0 is the move index, index 1 is the eval.
         this->best_move_last_iteration = moves[current[0]];
         if (!this->think_timeout) { // For some reason the bot plays awfully when I keep the result of the unfinished iteration, this shouldnt happen.
             best_move_and_eval = current;
@@ -32,7 +34,7 @@ Move IterativeDeepeningV2::get_move(Board& board) {
     return moves[best_move_and_eval[0]];
 }
 
-int* IterativeDeepeningV2::search(Board& board, int start_depth, int depth, Move last_move, int isWhite) {
+int* IterativeDeepeningV2::search(Board& board, int start_depth, int depth, Move last_move, int isWhite, int alpha, int beta) {
     int* arr = new int[2];
     arr[0] = 255;
     arr[1] = -2147483648;
@@ -49,11 +51,10 @@ int* IterativeDeepeningV2::search(Board& board, int start_depth, int depth, Move
     Move move;
     // Search best move from previous iteration first.
     if (this->best_move_last_iteration.moved_piece != EMPTY && depth == start_depth) {
-        cout << this->best_move_last_iteration.start_square << endl;
         move = this->best_move_last_iteration;
         // Make the move and continue the search at 1 depth deeper.
         board.move_piece(move);
-        int* next = this->search(board, start_depth, depth-1, move, -isWhite);
+        int* next = this->search(board, start_depth, depth-1, move, -isWhite, -beta, -alpha);
         board.undo_move(move);
 
         // Compare the evaluation for the current move with the best move found so far.
@@ -80,7 +81,7 @@ int* IterativeDeepeningV2::search(Board& board, int start_depth, int depth, Move
 
         // Make the move and continue the search at 1 depth deeper.
         board.move_piece(move);
-        int* next = this->search(board, start_depth, depth-1, move, -isWhite);
+        int* next = this->search(board, start_depth, depth-1, move, -isWhite, -beta, -alpha);
         board.undo_move(move);
 
         // Compare the evaluation for the current move with the best move found so far.
@@ -119,8 +120,8 @@ int IterativeDeepeningV2::evaluate(Board& board) {
     }
 
     // Return 0 if it is stalemate.
-    if (board.turn == WHITE && n_white_moves == 0) return 69420;
-    if (board.turn == BLACK && n_black_moves == 0) return 69420;
+    if (board.turn == WHITE && n_white_moves == 0) return 0;
+    if (board.turn == BLACK && n_black_moves == 0) return 0;
 
     // Calculate mobility and scale the mobility score down a bit to make it weigh in less to the total score.
     // Mobility sometimes can cause weird moves which are just meant for mobility.
